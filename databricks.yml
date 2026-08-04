@@ -13,10 +13,14 @@ targets:
     mode: development
     default: true
     workspace:
-      host: https://<your-workspace-host>
+      host: https://dbc-96900e6d-823b.cloud.databricks.com
   prod:
     mode: production
     workspace:
-      host: https://<your-workspace-host>
+      host: https://dbc-96900e6d-823b.cloud.databricks.com
+      # production mode requires a fixed root_path so at most one copy is
+      # ever deployed — a per-developer default path would let two people
+      # each deploy their "own" prod by accident.
+      root_path: /Workspace/Users/akash.dolas@gmail.com/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: mdm_dq_prod

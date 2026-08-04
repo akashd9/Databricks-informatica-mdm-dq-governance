@@ -1,0 +1,51 @@
+entity: customer
+canonical_columns:
+  - customer_id
+  - full_name
+  - email
+  - tax_id
+  - address_line1
+  - country_code
+  - postal_code
+  - updated_at
+
+# Raw column name per source, keyed by canonical column name. Consumed by
+# src/silver/silver_transform.py (Spark) and pilot/run_pilot_validation.py
+# (pandas) so both stay in sync off one definition instead of two.
+source_column_maps:
+  erp:
+    customer_id: cust_no
+    full_name: cust_name
+    email: email_addr
+    tax_id: fed_tax_id
+    address_line1: addr1
+    country_code: ctry_cd
+    postal_code: zip_cd
+    updated_at: last_upd_ts
+  crm:
+    customer_id: account_id
+    full_name: account_name
+    email: primary_email
+    tax_id: vat_number
+    address_line1: billing_address
+    country_code: country
+    postal_code: postal_code
+    updated_at: modified_date
+  flatfile:
+    customer_id: id
+    full_name: name
+    email: email
+    tax_id: tax_id
+    address_line1: address
+    country_code: country
+    postal_code: zip
+    updated_at: load_date
+  partner_api:
+    customer_id: partnerCustomerId
+    full_name: legalName
+    email: contactEmail
+    tax_id: taxIdentifier
+    address_line1: address
+    country_code: countryCode
+    postal_code: postalCode
+    updated_at: lastModified

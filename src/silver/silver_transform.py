@@ -6,6 +6,7 @@ to the DQ gate and MDM gate downstream, not here.
 """
 import dlt
 from pyspark.sql import functions as F
+from src.config_loader import load
 
 _BRONZE_TABLES = {
     "erp": "bronze_erp_customer",
@@ -14,54 +15,12 @@ _BRONZE_TABLES = {
     "partner_api": "bronze_partner_api_customer",
 }
 
-# Raw column name -> canonical column name, per source system.
-_COLUMN_MAPS = {
-    "erp": {
-        "customer_id": "cust_no",
-        "full_name": "cust_name",
-        "email": "email_addr",
-        "tax_id": "fed_tax_id",
-        "address_line1": "addr1",
-        "country_code": "ctry_cd",
-        "postal_code": "zip_cd",
-        "updated_at": "last_upd_ts",
-    },
-    "crm": {
-        "customer_id": "account_id",
-        "full_name": "account_name",
-        "email": "primary_email",
-        "tax_id": "vat_number",
-        "address_line1": "billing_address",
-        "country_code": "country",
-        "postal_code": "postal_code",
-        "updated_at": "modified_date",
-    },
-    "flatfile": {
-        "customer_id": "id",
-        "full_name": "name",
-        "email": "email",
-        "tax_id": "tax_id",
-        "address_line1": "address",
-        "country_code": "country",
-        "postal_code": "zip",
-        "updated_at": "load_date",
-    },
-    "partner_api": {
-        "customer_id": "partnerCustomerId",
-        "full_name": "legalName",
-        "email": "contactEmail",
-        "tax_id": "taxIdentifier",
-        "address_line1": "address",
-        "country_code": "countryCode",
-        "postal_code": "postalCode",
-        "updated_at": "lastModified",
-    },
-}
-
-_CANONICAL_COLUMNS = [
-    "customer_id", "full_name", "email", "tax_id",
-    "address_line1", "country_code", "postal_code", "updated_at",
-]
+# Raw-to-canonical column mapping lives in config/column_maps.yml — shared
+# with pilot/run_pilot_validation.py, which can't import this module
+# directly since it depends on `dlt` (only available inside a pipeline run).
+_COLUMN_CONFIG = load("column_maps.yml")
+_COLUMN_MAPS = _COLUMN_CONFIG["source_column_maps"]
+_CANONICAL_COLUMNS = _COLUMN_CONFIG["canonical_columns"]
 
 
 def _standardize(source_name: str, bronze_table: str):

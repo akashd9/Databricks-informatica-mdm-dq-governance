@@ -1,0 +1,29 @@
+entity: account
+id_column: account_id
+
+match_attributes:
+  - column: account_name
+    method: jaro_winkler
+    weight: 0.5
+  - column: owner_customer_id
+    method: exact
+    weight: 0.3
+  - column: account_type
+    method: exact
+    weight: 0.2
+
+# Not pilot-tuned like customer's (see pilot/PILOT_REPORT.md) — these are
+# reasonable starting values. Before production use, generate an
+# account-shaped pilot dataset the same way pilot/generate_pilot_dataset.py
+# does for customer, and run it through the same tuning process.
+match_threshold: 0.7
+auto_merge_threshold: 0.9
+
+survivorship:
+  strategy: source_priority_then_recency
+  source_priority: [erp, crm]
+
+informatica_mdm:
+  enabled: false
+  business_entity: Account
+  match_rule_set: ACCOUNT_MATCH_RULESET_V1

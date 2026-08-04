@@ -1,0 +1,37 @@
+entity: account
+canonical_columns:
+  - account_id
+  - account_name
+  - account_type
+  - industry
+  - annual_revenue
+  - owner_customer_id
+  - country_code
+  - postal_code
+  - updated_at
+
+# Matches src/mdm/match_merge.py's LocalMatchMergeFallback blocking key
+# (country_code + postal_code prefix) unchanged — that class is reused as-is
+# for account match/merge, so account needs the same two geography columns
+# customer has, even though nothing else about accounts is address-centric.
+source_column_maps:
+  erp:
+    account_id: acct_no
+    account_name: acct_name
+    account_type: acct_type_cd
+    industry: industry_cd
+    annual_revenue: annual_rev
+    owner_customer_id: owning_cust_id
+    country_code: ctry_cd
+    postal_code: acct_zip_cd
+    updated_at: last_upd_ts
+  crm:
+    account_id: account_id
+    account_name: name
+    account_type: type
+    industry: industry
+    annual_revenue: revenue
+    owner_customer_id: owner_id
+    country_code: billing_country
+    postal_code: billing_postal_code
+    updated_at: modified_date

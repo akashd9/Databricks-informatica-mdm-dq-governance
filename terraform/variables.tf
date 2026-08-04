@@ -11,9 +11,17 @@ variable "catalog_name" {
 }
 
 variable "informatica_idmc_base_url" {
-  description = "Informatica IDMC Cloud Data Quality pod base URL, e.g. https://dmapisXX.informaticacloud.com. Replace before applying."
+  description = <<-EOT
+    Informatica IDMC Cloud Data Quality API base URL. The default below is a
+    *candidate* only — usw1.dm2-us.informaticacloud.com is this tenant's UI
+    pod, not confirmed as the API base (IDMC's actual API host is normally
+    returned by its login call and can differ per product). Verify before
+    relying on it, and note src/quality/dq_rules.py's InformaticaCloudDQClient
+    still assumes a session token already exists as a secret — it doesn't
+    perform the login call itself yet.
+  EOT
   type        = string
-  default     = "https://REPLACE_ME.informaticacloud.com"
+  default     = "https://usw1.dm2-us.informaticacloud.com"
 }
 
 variable "informatica_mdm_base_url" {

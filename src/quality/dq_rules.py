@@ -67,22 +67,45 @@ class InformaticaCloudDQClient(InformaticaDQClient):
         return spark.read.format("delta").load(poll.json()["outputPath"])
 
 
+_SEVERITY_WEIGHTS = {"critical": 1.0, "warn": 0.5}
+
+
+def _rule_pass_condition(rule: dict):
+    column = F.col(rule["column"])
+    rule_type = rule["type"]
+    if rule_type == "not_null":
+        return column.isNotNull()
+    if rule_type == "regex":
+        return column.isNotNull() & column.rlike(rule["pattern"])
+    if rule_type == "allowed_values":
+        return column.isin(rule["values"])
+    raise ValueError(f"Unknown DQ rule type: {rule_type!r} (rule {rule['name']!r})")
+
+
 class LocalDQFallback(InformaticaDQClient):
     """Used in dev/demo when Informatica connectivity isn't configured yet.
     Mirrors the IDQ mapping's output contract (dq_score, dq_issues) so
-    downstream code is identical either way.
+    downstream code is identical either way. Driven entirely by the
+    declarative `rules` list in config/dq_rules.yml — adding, removing, or
+    reweighting a check (via `severity`) is a config change, not a code
+    change. `severity: critical` rules count double a `warn` rule's weight
+    toward dq_score.
     """
 
+    def __init__(self, rules: list[dict]):
+        self.rules = rules
+
     def score(self, df: DataFrame, mapping_name: str) -> DataFrame:
-        checks = {
-            "missing_customer_id": F.col("customer_id").isNull(),
-            "missing_name": F.col("full_name").isNull(),
-            "invalid_email": ~F.col("email").rlike(r"^[^@\s]+@[^@\s]+\.[^@\s]+$"),
-            "invalid_tax_id": ~F.col("tax_id").rlike(r"^[A-Z0-9\-]{5,20}$"),
-        }
-        pass_exprs = [(~cond).cast("int") for cond in checks.values()]
-        score_expr = sum(pass_exprs) / F.lit(float(len(pass_exprs)))
-        issue_exprs = [F.when(cond, F.lit(name)) for name, cond in checks.items()]
+        weights = [_SEVERITY_WEIGHTS[r["severity"]] for r in self.rules]
+        total_weight = sum(weights)
+
+        pass_conditions = [_rule_pass_condition(r) for r in self.rules]
+        weighted_pass = [
+            F.when(cond, F.lit(w)).otherwise(F.lit(0.0))
+            for cond, w in zip(pass_conditions, weights)
+        ]
+        score_expr = sum(weighted_pass) / F.lit(total_weight)
+        issue_exprs = [F.when(~cond, F.lit(r["name"])) for cond, r in zip(pass_conditions, self.rules)]
 
         return df.withColumn("dq_score", score_expr).withColumn(
             "dq_issues", F.concat_ws(",", *issue_exprs)

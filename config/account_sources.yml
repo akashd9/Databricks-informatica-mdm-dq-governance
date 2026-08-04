@@ -1,0 +1,17 @@
+# Account entity, scoped to 2 sources (ERP, CRM) rather than all 4 — accounts
+# in most orgs originate primarily from ERP/CRM, less commonly from flat
+# files or partner APIs. Demonstrates the gate pattern generalizes without
+# requiring every entity to mirror customer's exact source footprint.
+sources:
+  - name: erp
+    format: parquet
+    landing_path: /Volumes/mdm_dq_demo/landing/erp/accounts
+    entity: account
+    priority: 1
+    freshness_sla_hours: 24
+  - name: crm
+    format: json
+    landing_path: /Volumes/mdm_dq_demo/landing/crm/accounts
+    entity: account
+    priority: 2
+    freshness_sla_hours: 6

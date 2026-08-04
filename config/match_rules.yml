@@ -1,4 +1,5 @@
 entity: customer
+id_column: customer_id
 
 blocking_keys:
   - [country_code, postal_code_prefix]
@@ -18,7 +19,18 @@ match_attributes:
     method: jaro_winkler
     weight: 0.15
 
-match_threshold: 0.82
+# Tuned against pilot/generate_pilot_dataset.py via pilot/run_pilot_validation.py
+# (see pilot/PILOT_REPORT.md): 0.82 under-matched badly (recall 0.60) despite
+# perfect precision at every threshold tested down to 0.45, meaning this
+# pilot's data had no near-miss false-positive risk in that range. Picked
+# 0.65 for margin below the empirical break-even (0.70 already hit recall
+# 0.975; 0.65-0.45 all plateaued at precision=1.0/recall=1.0). Re-tune this
+# once real source data is available — synthetic data's error patterns won't
+# exactly match production's.
+match_threshold: 0.65
+# Matches at/above this are merged with no flag; matches between
+# match_threshold and this are still merged (best current guess) but marked
+# needs_review in survivorship.py's output for steward follow-up.
 auto_merge_threshold: 0.93
 
 survivorship:

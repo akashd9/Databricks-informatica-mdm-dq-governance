@@ -7,7 +7,11 @@ import dlt
 from pyspark.sql import functions as F
 from src.config_loader import load
 
-_SOURCES = load("sources.yml")["sources"]
+# Each entity's sources.yml lists its own source systems (customer uses all
+# 4; account uses just erp/crm — see config/account_sources.yml). Bronze
+# table names are derived from source['entity'], so adding a new entity here
+# only ever means adding a new sources.yml, never touching this loop.
+_SOURCES = load("sources.yml")["sources"] + load("account_sources.yml")["sources"]
 
 
 def _make_bronze_table(source: dict):

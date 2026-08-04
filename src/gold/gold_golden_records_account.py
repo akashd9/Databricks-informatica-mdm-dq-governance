@@ -1,0 +1,36 @@
+"""Gold gate for the account entity — reuses
+src/mdm/survivorship.py::build_golden_records unchanged (it was already
+generic, taking config as a parameter with no entity-specific assumptions);
+only the config and output column selection differ from gold_golden_records.py
+(customer).
+"""
+import dlt
+from pyspark.sql import functions as F
+from src.config_loader import load
+from src.mdm.survivorship import build_golden_records
+
+_MATCH_CONFIG = load("account_match_rules.yml")
+_DQ_CONFIG = load("account_dq_rules.yml")
+_MIN_SCORE = _DQ_CONFIG["informatica_dq"]["min_dq_score_for_gold"]
+
+
+@dlt.table(
+    name="gold_account_golden",
+    comment="Curated, DQ-scored, de-duplicated golden account record.",
+    table_properties={"quality": "gold", "delta.enableChangeDataFeed": "true"},
+)
+@dlt.expect_or_fail("has_golden_id", "golden_id IS NOT NULL")
+@dlt.expect_or_fail("min_dq_score", f"dq_score >= {_MIN_SCORE}")
+def gold_account_golden():
+    dq_passed = dlt.read("silver_account_dq_passed")
+    match_groups = dlt.read("silver_account_match_groups")
+    golden = build_golden_records(dq_passed, match_groups, _MATCH_CONFIG)
+    return golden.select(
+        "golden_id",
+        "account_name", "account_type", "industry", "annual_revenue", "owner_customer_id",
+        "country_code", "postal_code",
+        "dq_score", "dq_issues",
+        "match_confidence", "source_record_count", "source_customer_ids",
+        F.col("_source_system").alias("surviving_source_system"),
+        "review_status", "merged_at",
+    )

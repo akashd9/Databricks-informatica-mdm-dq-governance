@@ -1,0 +1,24 @@
+entity: account
+rules:
+  - name: account_id_not_null
+    column: account_id
+    type: not_null
+    severity: critical
+  - name: account_name_not_null
+    column: account_name
+    type: not_null
+    severity: critical
+  - name: account_type_valid
+    column: account_type
+    type: allowed_values
+    values: [Prospect, Customer, Partner, Reseller]
+    severity: warn
+  - name: industry_not_null
+    column: industry
+    type: not_null
+    severity: warn
+
+informatica_dq:
+  enabled: false # same Informatica IDMC connectivity as customer once configured
+  mapping_name: ACCOUNT_STD_VALIDATION_MAPPING
+  min_dq_score_for_gold: 0.85

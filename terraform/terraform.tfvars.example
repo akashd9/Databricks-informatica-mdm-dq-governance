@@ -11,9 +11,11 @@ catalog_name        = "mdm_dq_demo"
 # — this account's Default Storage setting rejects catalog creation via the
 # API. Everything else below applies normally.
 
-# Informatica — leave as REPLACE_ME here and pass the real values via
-# TF_VAR_informatica_* env vars instead, especially the session token.
-informatica_idmc_base_url = "https://REPLACE_ME.informaticacloud.com"
+# Informatica — idmc_base_url below is an unverified candidate (this
+# tenant's UI pod, not confirmed as the API host). mdm_base_url is still an
+# unknown placeholder. Pass real values via TF_VAR_informatica_* env vars,
+# especially the session token — never put that one in a file.
+informatica_idmc_base_url = "https://usw1.dm2-us.informaticacloud.com"
 informatica_mdm_base_url  = "https://REPLACE_ME-mdm.informaticacloud.com"
 # informatica_session_token intentionally omitted — set via
 # TF_VAR_informatica_session_token so it never lands in a file.

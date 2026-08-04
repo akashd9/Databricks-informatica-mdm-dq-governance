@@ -32,5 +32,5 @@ def gold_customer_golden():
         "dq_score", "dq_issues",
         "match_confidence", "source_record_count", "source_customer_ids",
         F.col("_source_system").alias("surviving_source_system"),
-        "merged_at",
+        "review_status", "merged_at",
     )

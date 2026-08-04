@@ -72,10 +72,12 @@ class InformaticaMDMSaaSClient(InformaticaMDMClient):
 
 
 class LocalMatchMergeFallback(InformaticaMDMClient):
-    """Blocking on (country_code, postal_code prefix) + pairwise Jaro-Winkler
-    name scoring + connected-components clustering via GraphFrames. Used in
-    dev/demo when Informatica MDM isn't reachable. Requires the GraphFrames
-    Maven library attached to the cluster and `jellyfish` on the driver.
+    """Blocking on (country_code, postal_code prefix) + pairwise scoring
+    across every attribute in match_rules.yml's `match_attributes` (each
+    weighted, method jaro_winkler or exact) + connected-components
+    clustering via GraphFrames. Used in dev/demo when Informatica MDM isn't
+    reachable. Requires the GraphFrames Maven library attached to the
+    cluster and `jellyfish` on the driver.
     """
 
     def __init__(self, config: dict):
@@ -86,20 +88,25 @@ class LocalMatchMergeFallback(InformaticaMDMClient):
         import jellyfish
         import pandas as pd
 
+        id_col = self.config["id_column"]
+        attributes = self.config["match_attributes"]
+        columns = [a["column"] for a in attributes]
+        total_weight = sum(a["weight"] for a in attributes)
+
         blocked = df.withColumn(
             "block_key",
             F.concat_ws("|", F.col("country_code"), F.substring(F.col("postal_code"), 1, 3)),
         )
 
         left = blocked.select(
-            F.col("customer_id").alias("id_a"), F.col("full_name").alias("name_a"),
-            F.col("email").alias("email_a"), F.col("tax_id").alias("tax_a"),
-            F.col("block_key"),
+            F.col(id_col).alias("id_a"),
+            *[F.col(c).alias(f"{c}_a") for c in columns],
+            "block_key",
         )
         right = blocked.select(
-            F.col("customer_id").alias("id_b"), F.col("full_name").alias("name_b"),
-            F.col("email").alias("email_b"), F.col("tax_id").alias("tax_b"),
-            F.col("block_key"),
+            F.col(id_col).alias("id_b"),
+            *[F.col(c).alias(f"{c}_b") for c in columns],
+            "block_key",
         )
         pairs = left.join(right, on="block_key").filter(F.col("id_a") < F.col("id_b"))
 
@@ -107,18 +114,25 @@ class LocalMatchMergeFallback(InformaticaMDMClient):
         def jw_sim(a: pd.Series, b: pd.Series) -> pd.Series:
             return a.combine(b, lambda x, y: jellyfish.jaro_winkler_similarity(x or "", y or ""))
 
+        scored = pairs
+        weighted_terms = []
+        for attr in attributes:
+            col, method, weight = attr["column"], attr["method"], attr["weight"]
+            sim_col = f"_sim_{col}"
+            if method == "jaro_winkler":
+                scored = scored.withColumn(sim_col, jw_sim(f"{col}_a", f"{col}_b"))
+            elif method == "exact":
+                scored = scored.withColumn(sim_col, (F.col(f"{col}_a") == F.col(f"{col}_b")).cast("double"))
+            else:
+                raise ValueError(f"Unknown match method: {method!r} (attribute {col!r})")
+            weighted_terms.append(F.col(sim_col) * F.lit(weight))
+
         scored = (
-            pairs.withColumn("name_sim", jw_sim("name_a", "name_b"))
-            .withColumn("email_match", (F.col("email_a") == F.col("email_b")).cast("double"))
-            .withColumn("tax_match", (F.col("tax_a") == F.col("tax_b")).cast("double"))
-            .withColumn(
-                "match_confidence",
-                F.col("name_sim") * 0.5 + F.col("email_match") * 0.3 + F.col("tax_match") * 0.2,
-            )
+            scored.withColumn("match_confidence", sum(weighted_terms) / F.lit(total_weight))
             .filter(F.col("match_confidence") >= self.config["match_threshold"])
         )
 
-        vertices = df.select(F.col("customer_id").alias("id")).distinct()
+        vertices = df.select(F.col(id_col).alias("id")).distinct()
         edges = scored.select(F.col("id_a").alias("src"), F.col("id_b").alias("dst"), "match_confidence")
 
         gf = GraphFrame(vertices, edges)

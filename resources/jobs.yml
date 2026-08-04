@@ -21,15 +21,36 @@ resources:
           notebook_task:
             notebook_path: ../src/observability/anomaly_gate.py
 
+        - task_key: refresh_steward_queue
+          depends_on:
+            - task_key: run_medallion_pipeline
+          notebook_task:
+            notebook_path: ../src/governance/steward_review_refresh.py
+
+        - task_key: apply_glossary_submissions
+          depends_on:
+            - task_key: run_medallion_pipeline
+          notebook_task:
+            notebook_path: ../src/governance/glossary_submissions_apply.py
+
         - task_key: glossary_lineage_gate
           depends_on:
             - task_key: anomaly_gate
+            - task_key: refresh_steward_queue
+            - task_key: apply_glossary_submissions
           notebook_task:
             notebook_path: ../src/governance/glossary_gate.py
+
+        - task_key: cost_monitor
+          depends_on:
+            - task_key: run_medallion_pipeline
+          notebook_task:
+            notebook_path: ../src/observability/cost_monitor.py
 
         - task_key: refresh_drift_monitor
           depends_on:
             - task_key: glossary_lineage_gate
+            - task_key: cost_monitor
           notebook_task:
             notebook_path: ../src/observability/drift_monitor.py
 

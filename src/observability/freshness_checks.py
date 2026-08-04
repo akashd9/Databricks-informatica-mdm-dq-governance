@@ -1,28 +1,66 @@
+# Databricks notebook source
 """Freshness gate: runs before the medallion pipeline starts. If a source
 hasn't landed new files within its configured SLA window, the job halts
-here rather than building a golden record on stale inputs.
+here rather than building a golden record on stale inputs. Every check
+(pass or fail) is logged to governance.freshness_check_log — the SLA
+dashboard (see dashboards/sla_dashboard_queries.sql) reads this table for
+freshness compliance over time, which nothing else in the pipeline persists.
 """
 from datetime import datetime, timezone
+from pyspark.sql import functions as F
 from src.config_loader import load
 
-_sources = load("sources.yml")["sources"]
+CATALOG = "mdm_dq_demo"
+
+spark.sql(f"""
+    CREATE TABLE IF NOT EXISTS {CATALOG}.governance.freshness_check_log (
+        entity STRING,
+        source STRING,
+        status STRING,       -- 'ok' | 'stale' | 'error'
+        detail STRING,
+        age_hours DOUBLE,
+        sla_hours DOUBLE,
+        checked_at TIMESTAMP
+    ) USING DELTA
+""")
+
+_sources = load("sources.yml")["sources"] + load("account_sources.yml")["sources"]
 
 _stale = []
+_log_rows = []
+
 for source in _sources:
+    label = f"{source['entity']}/{source['name']}"
+    sla = source["freshness_sla_hours"]
+
     try:
         files = dbutils.fs.ls(source["landing_path"])
     except Exception:
-        _stale.append((source["name"], "landing path not found"))
+        _stale.append((label, "landing path not found"))
+        _log_rows.append((source["entity"], source["name"], "error", "landing path not found", None, sla))
         continue
+
     if not files:
-        _stale.append((source["name"], "no files found"))
+        _stale.append((label, "no files found"))
+        _log_rows.append((source["entity"], source["name"], "error", "no files found", None, sla))
         continue
 
     latest_mtime = max(f.modificationTime for f in files) / 1000
     age_hours = (datetime.now(timezone.utc).timestamp() - latest_mtime) / 3600
-    sla = source["freshness_sla_hours"]
+
     if age_hours > sla:
-        _stale.append((source["name"], f"latest file is {age_hours:.1f}h old, SLA is {sla}h"))
+        detail = f"latest file is {age_hours:.1f}h old, SLA is {sla}h"
+        _stale.append((label, detail))
+        _log_rows.append((source["entity"], source["name"], "stale", detail, age_hours, sla))
+    else:
+        _log_rows.append((source["entity"], source["name"], "ok", None, age_hours, sla))
+
+(
+    spark.createDataFrame(_log_rows, ["entity", "source", "status", "detail", "age_hours", "sla_hours"])
+    .withColumn("checked_at", F.current_timestamp())
+    .write.format("delta").mode("append")
+    .saveAsTable(f"{CATALOG}.governance.freshness_check_log")
+)
 
 if _stale:
     raise RuntimeError(f"Freshness gate failed for sources: {_stale}")

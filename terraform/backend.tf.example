@@ -1,0 +1,34 @@
+# Remote state backend — NOT active by default. This file is named
+# backend.tf.example (not backend.tf) on purpose: `terraform init` won't
+# pick it up until the S3 bucket below actually exists and this file is
+# renamed. State is currently local-only (terraform.tfstate on whichever
+# machine last ran apply) — fine for one person, not for a team.
+#
+# Blocked on: AWS credentials with S3 permissions. None exist on the machine
+# this was scaffolded from (see the "Deploy scope" discussion in project
+# history) — someone with real AWS access to this account needs to run step
+# 1 below.
+#
+# Terraform >= 1.10 (this repo is pinned to ~> 1.50, see providers.tf)
+# supports native S3 state locking via use_lockfile, so no DynamoDB lock
+# table is required.
+#
+# To activate:
+#   1. Create the bucket (can't be created by this config — it can't
+#      provision the very bucket it will store its own state in):
+#        aws s3api create-bucket --bucket <your-bucket> --region us-east-2 \
+#          --create-bucket-configuration LocationConstraint=us-east-2
+#        aws s3api put-bucket-versioning --bucket <your-bucket> \
+#          --versioning-configuration Status=Enabled
+#   2. cp backend.tf.example backend.tf, fill in the real bucket name.
+#   3. terraform init -migrate-state   (moves existing local state up)
+#
+terraform {
+  backend "s3" {
+    bucket       = "REPLACE_ME-mdm-dq-medallion-tfstate"
+    key          = "mdm-dq-medallion/terraform.tfstate"
+    region       = "us-east-2" # matches this metastore's region (metastore_aws_us_east_2)
+    use_lockfile = true
+    encrypt      = true
+  }
+}

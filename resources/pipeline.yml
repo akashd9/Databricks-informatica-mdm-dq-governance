@@ -10,6 +10,7 @@ resources:
       libraries:
         - file:
             path: ../src/bronze/bronze_ingest.py
+        # customer
         - file:
             path: ../src/silver/silver_transform.py
         - file:
@@ -18,6 +19,16 @@ resources:
             path: ../src/mdm/match_merge.py
         - file:
             path: ../src/gold/gold_golden_records.py
+        # account — same gate pattern, reusing the customer modules'
+        # classes/functions; see config/account_*.yml
+        - file:
+            path: ../src/silver/silver_transform_account.py
+        - file:
+            path: ../src/quality/dq_gate_account.py
+        - file:
+            path: ../src/mdm/match_merge_account.py
+        - file:
+            path: ../src/gold/gold_golden_records_account.py
       configuration:
         pipelines.reset.allowed: "false"
       clusters:

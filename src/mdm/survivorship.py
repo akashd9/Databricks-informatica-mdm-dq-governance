@@ -2,17 +2,24 @@
 field values for each golden_id using configured source-priority + recency
 precedence, and roll up cluster metadata (member count, source ids,
 confidence) onto it for auditability.
+
+Entity-agnostic: which column on dq_passed identifies a record
+(config["id_column"] — "customer_id" for customer, "account_id" for
+account) varies per entity, but match_groups' own output column is always
+literally "member_customer_id" regardless — that's match_merge.py's fixed
+output contract, not a customer-specific name.
 """
 from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
 
 def build_golden_records(dq_passed: DataFrame, match_groups: DataFrame, config: dict) -> DataFrame:
+    id_col = config["id_column"]
     priority = config["survivorship"]["source_priority"]
     priority_map = F.create_map(*[x for i, s in enumerate(priority) for x in (F.lit(s), F.lit(i))])
 
     joined = (
-        dq_passed.join(match_groups, dq_passed["customer_id"] == match_groups["member_customer_id"])
+        dq_passed.join(match_groups, dq_passed[id_col] == match_groups["member_customer_id"])
         .withColumn("_priority_rank", priority_map[F.col("_source_system")])
     )
 
@@ -31,4 +38,14 @@ def build_golden_records(dq_passed: DataFrame, match_groups: DataFrame, config: 
         F.avg("match_confidence").alias("match_confidence"),
     )
 
-    return survivors.join(member_counts, on="golden_id").withColumn("merged_at", F.current_timestamp())
+    auto_merge_threshold = config["auto_merge_threshold"]
+    return (
+        survivors.join(member_counts, on="golden_id")
+        .withColumn("merged_at", F.current_timestamp())
+        .withColumn(
+            "review_status",
+            F.when(F.col("source_record_count") == 1, F.lit("single_source"))
+            .when(F.col("match_confidence") >= auto_merge_threshold, F.lit("auto_merged"))
+            .otherwise(F.lit("needs_review")),
+        )
+    )

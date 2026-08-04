@@ -1,0 +1,10 @@
+entity: account
+required_glossary_mappings:
+  - column: golden_id
+    glossary_term: Account Golden Record ID
+  - column: account_name
+    glossary_term: Account Legal Name
+  - column: account_type
+    glossary_term: Account Type Classification
+  - column: dq_score
+    glossary_term: Data Quality Score
