@@ -38,7 +38,7 @@ survivorship:
   source_priority: [erp, crm, partner_api, flatfile]
 
 # Governs the call-out to Informatica MDM SaaS batch match/merge API. When
-# disabled, the local GraphFrames-based fallback in match_merge.py runs
+# disabled, the local union-find-based fallback in match_merge.py runs
 # instead, using the attributes/threshold above.
 informatica_mdm:
   enabled: false # flip to true once MDM connectivity/secrets are configured

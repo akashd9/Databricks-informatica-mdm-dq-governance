@@ -54,7 +54,7 @@ fallback without changing pipeline code:
    scores every record; anything below the configured threshold is
    quarantined, never reaches match/merge or Gold.
 4. **MDM gate** — Informatica MDM SaaS batch match/merge (or a local
-   GraphFrames blocking + Jaro-Winkler + connected-components fallback)
+   blocking + Jaro-Winkler + union-find connected-components fallback)
    clusters DQ-passed records into match groups; survivorship rules pick the
    surviving field values per cluster.
 5. **Gold** — the golden record table, gated by `dlt.expect_or_fail` on
@@ -177,7 +177,7 @@ production-representative.
 | | |
 |---|---|
 | **Strengths** | Enforced (not advisory) gates; config-driven rules pilot-tuned against real measured precision/recall, not just asserted; two entities on one shared, generalized gate pattern; Informatica abstracted behind an interface so the pipeline runs today without live credentials; infra as code, applied and live, not just planned; CI runs the full test suite (incl. Spark-backed tests via a JVM) and validates the bundle against the real workspace on every push; steward review and glossary submissions are live feedback loops, not read-only reports. |
-| **Weaknesses** | Local DQ/MDM fallbacks are simplistic compared to real Informatica IDQ/MDM accuracy and untested against real Informatica; GraphFrames fallback needs a Maven cluster library; Informatica secrets are still placeholders (`enabled: false`) — nothing has run against live IDMC/MDM yet; Terraform state is local-only (backend scaffolded in `terraform/backend.tf.example`, not activated — needs AWS credentials this project doesn't have); match/merge and survivorship assume each source's raw ID is globally unique, which real ERP/CRM systems won't guarantee (see `PILOT_REPORT.md`); SLA dashboard is SQL queries, not a deployed Lakeview dashboard (avoided hand-fabricating unverified widget JSON). |
+| **Weaknesses** | Local DQ/MDM fallbacks are simplistic compared to real Informatica IDQ/MDM accuracy and untested against real Informatica; local match/merge clustering collects matched pairs to the driver for union-find (fine at pilot scale, needs revisiting at high production volume); Informatica secrets are still placeholders (`enabled: false`) — nothing has run against live IDMC/MDM yet; Terraform state is local-only (backend scaffolded in `terraform/backend.tf.example`, not activated — needs AWS credentials this project doesn't have); match/merge and survivorship assume each source's raw ID is globally unique, which real ERP/CRM systems won't guarantee (see `PILOT_REPORT.md`); SLA dashboard is SQL queries, not a deployed Lakeview dashboard (avoided hand-fabricating unverified widget JSON). |
 | **Opportunities** | Wire real Informatica credentials once available and re-run pilot validation against live scoring; extend the same pattern to a third entity (product); activate the remote Terraform backend once AWS access exists; build a proper UI on top of the steward review queue instead of raw Delta table inserts; resolve the multi-region design question in `docs/multi-region-considerations.md` if data residency becomes a real requirement. |
 | **Threats** | Informatica API/schema changes breaking the REST client contract (untested against the real API); DQ/match thresholds tuned on synthetic data drifting out of tune against real data's actual error patterns; monitoring/compute cost at production volume (cost_monitor.py's price table is a rough estimate, not billing-accurate); governance gates becoming a rubber stamp if glossary/lineage checks aren't kept current as schemas evolve; the raw-ID-collision gap becoming a real production match/merge bug the pilot's clean synthetic IDs never surfaced. |
 
@@ -313,8 +313,10 @@ origin file.
   contract.
 - **Match/merge** (`src/mdm/match_merge.py`): Informatica MDM SaaS batch
   match REST call, or local blocking (country + postal prefix) + pairwise
-  Jaro-Winkler/exact-match scoring + GraphFrames connected-components
-  clustering.
+  Jaro-Winkler/exact-match scoring + driver-side union-find connected-
+  components clustering (not GraphFrames — Maven library attachment on a
+  Lakeflow pipeline cluster is a Private Preview API, not guaranteed
+  available on every workspace tier).
 - **Survivorship** (`src/mdm/survivorship.py`): source-priority-then-recency
   precedence per match cluster, rolling up member count and average match
   confidence onto the winning record.

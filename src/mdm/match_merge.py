@@ -1,10 +1,10 @@
 """MDM match/merge gate. Informatica MDM SaaS's batch match API is the
-primary path; a local GraphFrames-based fallback (blocking + pairwise
-Jaro-Winkler scoring + connected-components clustering) covers dev/demo
-before that connectivity is configured. Both paths converge on the same
-output contract: (golden_id, member_customer_id, match_confidence) — a
-cluster assignment, not a merged record. The actual golden record is built
-by survivorship.py from these clusters.
+primary path; a local fallback (blocking + pairwise Jaro-Winkler scoring +
+union-find connected-components clustering) covers dev/demo before that
+connectivity is configured. Both paths converge on the same output
+contract: (golden_id, member_customer_id, match_confidence) — a cluster
+assignment, not a merged record. The actual golden record is built by
+survivorship.py from these clusters.
 """
 import abc
 import time
@@ -75,16 +75,25 @@ class LocalMatchMergeFallback(InformaticaMDMClient):
     """Blocking on (country_code, postal_code prefix) + pairwise scoring
     across every attribute in match_rules.yml's `match_attributes` (each
     weighted, method jaro_winkler or exact) + connected-components
-    clustering via GraphFrames. Used in dev/demo when Informatica MDM isn't
-    reachable. Requires the GraphFrames Maven library attached to the
-    cluster and `jellyfish` on the driver.
+    clustering via a pure-Python union-find. Used in dev/demo when
+    Informatica MDM isn't reachable. Requires `jellyfish` on the driver.
+
+    Deliberately not GraphFrames: attaching a Maven library to a Lakeflow
+    Declarative Pipeline's cluster (pipelines.PipelineLibrary.maven) is a
+    Private Preview API as of this writing, not guaranteed available on
+    every workspace/account tier. Collecting the post-blocking,
+    post-threshold matched pairs to the driver and running union-find in
+    plain Python — the same algorithm pilot/run_pilot_validation.py already
+    validates against real measured precision/recall — avoids that
+    dependency entirely. Assumes the matched-pairs graph fits in driver
+    memory: reasonable at pilot/demo scale, worth revisiting (GraphFrames
+    once GA, or a distributed union-find) at high production volume.
     """
 
     def __init__(self, config: dict):
         self.config = config
 
     def match_merge(self, df: DataFrame) -> DataFrame:
-        from graphframes import GraphFrame
         import jellyfish
         import pandas as pd
 
@@ -130,25 +139,43 @@ class LocalMatchMergeFallback(InformaticaMDMClient):
         scored = (
             scored.withColumn("match_confidence", sum(weighted_terms) / F.lit(total_weight))
             .filter(F.col("match_confidence") >= self.config["match_threshold"])
+            .select("id_a", "id_b", "match_confidence")
         )
 
-        vertices = df.select(F.col(id_col).alias("id")).distinct()
-        edges = scored.select(F.col("id_a").alias("src"), F.col("id_b").alias("dst"), "match_confidence")
+        # Union-find clustering, driver-side. matched_pairs is already
+        # filtered to above-threshold pairs within a blocking bucket, so
+        # it's expected to be far smaller than the full record count.
+        matched_pairs = scored.collect()
+        all_ids = [row[id_col] for row in df.select(id_col).distinct().collect()]
+        parent = {i: i for i in all_ids}
 
-        gf = GraphFrame(vertices, edges)
-        components = gf.connectedComponents()
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        for row in matched_pairs:
+            union(row["id_a"], row["id_b"])
+
+        clusters_df = spark.createDataFrame(
+            [(i, find(i)) for i in all_ids], ["member_customer_id", "golden_id"]
+        )
 
         edge_conf = (
-            edges.select(F.col("src").alias("id"), "match_confidence")
-            .unionByName(edges.select(F.col("dst").alias("id"), "match_confidence"))
+            scored.select(F.col("id_a").alias("id"), "match_confidence")
+            .unionByName(scored.select(F.col("id_b").alias("id"), "match_confidence"))
             .groupBy("id")
             .agg(F.avg("match_confidence").alias("match_confidence"))
         )
 
         return (
-            components.withColumnRenamed("component", "golden_id")
-            .withColumnRenamed("id", "member_customer_id")
-            .join(edge_conf.withColumnRenamed("id", "member_customer_id"), on="member_customer_id", how="left")
+            clusters_df.join(edge_conf.withColumnRenamed("id", "member_customer_id"), on="member_customer_id", how="left")
             .fillna({"match_confidence": 1.0})  # singleton cluster: no match pair, trivially "self-matched"
         )
 
