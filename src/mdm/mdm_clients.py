@@ -15,8 +15,13 @@ import abc
 import time
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import DoubleType
+from pyspark.sql.types import DoubleType, StringType, StructType, StructField
 from pyspark.sql import SparkSession
+
+_CLUSTERS_SCHEMA = StructType([
+    StructField("member_customer_id", StringType()),
+    StructField("golden_id", StringType()),
+])
 
 # Explicit acquisition rather than relying on the injected notebook global:
 # functions defined in an imported module (not the top-level executing
@@ -179,9 +184,13 @@ class LocalMatchMergeFallback(InformaticaMDMClient):
         for row in matched_pairs:
             union(row["id_a"], row["id_b"])
 
-        clusters_df = spark.createDataFrame(
-            [(i, find(i)) for i in all_ids], ["member_customer_id", "golden_id"]
-        )
+        # Explicit schema, not inferred from the data: DLT's schema-resolution
+        # phase probes this function with an empty/mock input to determine
+        # each table's output type before real execution runs, so all_ids
+        # can legitimately be [] here even when real runs always have rows -
+        # inference from an empty list raises "can not infer schema from
+        # empty dataset" (same root cause fixed in freshness_checks.py).
+        clusters_df = spark.createDataFrame([(i, find(i)) for i in all_ids], _CLUSTERS_SCHEMA)
 
         edge_conf = (
             scored.select(F.col("id_a").alias("id"), "match_confidence")
