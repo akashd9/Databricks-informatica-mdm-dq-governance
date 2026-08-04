@@ -14,6 +14,15 @@ targets:
     default: true
     workspace:
       host: https://dbc-96900e6d-823b.cloud.databricks.com
+  test:
+    mode: development
+    workspace:
+      host: https://dbc-96900e6d-823b.cloud.databricks.com
+      # own root_path so dev/test/prod deployments never collide even
+      # though they currently share a workspace host.
+      root_path: /Workspace/Users/akash.dolas@gmail.com/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: mdm_dq_test
   prod:
     mode: production
     workspace:

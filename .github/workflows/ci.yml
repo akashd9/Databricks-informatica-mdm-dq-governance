@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, test, prod]
   pull_request:
-    branches: [main]
+    branches: [main, test, prod]
 
 jobs:
   python-tests:
@@ -63,9 +63,10 @@ jobs:
     runs-on: ubuntu-latest
     # Needs real workspace credentials (DATABRICKS_HOST / DATABRICKS_TOKEN
     # repo secrets) to resolve against an actual metastore/catalog, so this
-    # only runs on pushes to main (assumed to have them configured), not on
-    # every PR from a fork that wouldn't have access to those secrets.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # only runs on pushes to main/test/prod (assumed to have them
+    # configured), not on every PR from a fork that wouldn't have access to
+    # those secrets.
+    if: github.event_name == 'push'
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
@@ -75,5 +76,17 @@ jobs:
       - name: Install Databricks CLI
         run: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
 
+      # main -> dev target, test branch -> test target, prod branch -> prod
+      # target — keeps "which branch validates against which environment"
+      # in one place instead of three near-duplicate jobs.
+      - name: Determine bundle target for this branch
+        id: target
+        run: |
+          case "${{ github.ref_name }}" in
+            prod) echo "target=prod" >> "$GITHUB_OUTPUT" ;;
+            test) echo "target=test" >> "$GITHUB_OUTPUT" ;;
+            *) echo "target=dev" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - name: databricks bundle validate
-        run: databricks bundle validate -t dev
+        run: databricks bundle validate -t ${{ steps.target.outputs.target }}
