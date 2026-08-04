@@ -78,7 +78,16 @@ for _entity, (_config_file, _gold_table, _classification_tags) in _ENTITIES.item
     # skip gracefully rather than fail the whole setup on a fresh environment
     # where the pipeline hasn't run yet. Re-run this script after the first
     # pipeline run to actually apply the tags.
-    if not spark.catalog.tableExists(f"{CATALOG}.gold.{_gold_table}"):
+    #
+    # Gold tables actually live under `silver`, not `gold` — pipeline.yml's
+    # `target: silver` routes every declared table to one schema regardless
+    # of name prefix or quality tag (confirmed with a real run: `SHOW TABLES
+    # IN mdm_dq_demo.gold` returns nothing). Proper fix is qualifying every
+    # @dlt.table(name=...) with its intended schema and updating every
+    # dlt.read()/dlt.read_stream() call to match — not done in this pass to
+    # avoid destabilizing a pipeline that took several real bug fixes to get
+    # working.
+    if not spark.catalog.tableExists(f"{CATALOG}.silver.{_gold_table}"):
         print(f"Skipping column tags for {_gold_table}: table doesn't exist yet (run the pipeline first).")
         continue
 
@@ -88,7 +97,7 @@ for _entity, (_config_file, _gold_table, _classification_tags) in _ENTITIES.item
         for _key, _value in _tags:
             _clause = f"'{_key}' = '{_value}'" if _value else f"'{_key}'"
             spark.sql(f"""
-                ALTER TABLE {CATALOG}.gold.{_gold_table}
+                ALTER TABLE {CATALOG}.silver.{_gold_table}
                 ALTER COLUMN {_column} SET TAGS ({_clause})
             """)
 

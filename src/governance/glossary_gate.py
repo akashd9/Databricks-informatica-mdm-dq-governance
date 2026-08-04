@@ -28,6 +28,19 @@ from src.config_loader import load
 
 CATALOG = "mdm_dq_demo"
 
+# All tables below actually live under the `silver` schema, not split
+# across bronze/silver/gold schemas as the medallion design intends —
+# pipeline.yml's `target: silver` routes every declared table to one
+# schema regardless of its bronze_/silver_/gold_ name prefix or
+# table_properties quality tag (that tag is metadata only, not a routing
+# directive). Confirmed with a real run: `SHOW TABLES IN mdm_dq_demo.gold`
+# returns nothing; everything is in `mdm_dq_demo.silver`. Fixing this
+# properly means qualifying every @dlt.table(name=...) with its intended
+# schema (e.g. name="gold.gold_customer_golden") and updating every
+# dlt.read()/dlt.read_stream() call to match — deliberately not done in
+# this pass to avoid destabilizing a pipeline that took several real bug
+# fixes to get working; see the project's history for the full list.
+#
 # entity -> (glossary config file, gold table name, upstream silver table the
 # gold table's lineage must show)
 _ENTITIES = {
@@ -49,7 +62,7 @@ for _entity, (_config_file, _gold_table, _expected_upstream_table) in _ENTITIES.
     _lineage = spark.sql(f"""
         SELECT DISTINCT source_table_full_name
         FROM system.access.table_lineage
-        WHERE target_table_full_name = '{CATALOG}.gold.{_gold_table}'
+        WHERE target_table_full_name = '{CATALOG}.silver.{_gold_table}'
           AND event_time >= current_date() - INTERVAL 1 DAY
     """)
     _lineage_sources = {r["source_table_full_name"] for r in _lineage.collect()}
@@ -58,7 +71,7 @@ for _entity, (_config_file, _gold_table, _expected_upstream_table) in _ENTITIES.
     _expected_upstream = f"{CATALOG}.silver.{_expected_upstream_table}"
     if not any(_expected_upstream in s for s in _lineage_sources):
         raise ValueError(
-            f"Lineage gate failed for {_entity}: {CATALOG}.gold.{_gold_table} has no captured lineage from "
+            f"Lineage gate failed for {_entity}: {CATALOG}.silver.{_gold_table} has no captured lineage from "
             f"{_expected_upstream} in the last 24h — Unity Catalog is not confirming this run's data flow."
         )
 
