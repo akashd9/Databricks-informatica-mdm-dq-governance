@@ -29,7 +29,12 @@ def build_golden_records(dq_passed: DataFrame, match_groups: DataFrame, config: 
     survivors = (
         joined.withColumn("_rank", F.row_number().over(survivor_window))
         .filter(F.col("_rank") == 1)
-        .drop("_rank")
+        .drop("_rank", "match_confidence")  # drop the per-row value inherited from
+        # match_groups via the join above — member_counts below computes the
+        # real (aggregated) match_confidence for the cluster; keeping both
+        # produces two same-named columns and an AMBIGUOUS_REFERENCE error
+        # the moment anything downstream references match_confidence by name
+        # (a real error hit running this pipeline for the first time).
     )
 
     member_counts = match_groups.groupBy("golden_id").agg(
