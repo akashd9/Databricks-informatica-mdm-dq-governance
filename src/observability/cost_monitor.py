@@ -36,16 +36,28 @@ CATALOG = "mdm_dq_demo"
 _CONFIG = load("cost_monitoring.yml")
 _LOOKBACK_DAYS = _CONFIG["lookback_days"]
 
-spark.sql(f"""
-    CREATE TABLE IF NOT EXISTS {CATALOG}.governance.cost_monitor_log (
-        window_start DATE,
-        window_end DATE,
-        sku_name STRING,
-        dbus DOUBLE,
-        estimated_usd DOUBLE,
-        checked_at TIMESTAMP
-    ) USING DELTA
-""")
+# Same "degrade, don't crash the job" philosophy as the system.billing.usage
+# access check below: a shared metastore can be at its account-wide table
+# quota (hit for real running this pipeline — QUOTA_EXCEEDED.
+# UC_RESOURCE_QUOTA_EXCEEDED, a metastore-wide limit shared with every other
+# catalog in the workspace, not something this project can resolve on its
+# own), and that shouldn't take down cost visibility's dependents any more
+# than a missing system table should.
+try:
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {CATALOG}.governance.cost_monitor_log (
+            window_start DATE,
+            window_end DATE,
+            sku_name STRING,
+            dbus DOUBLE,
+            estimated_usd DOUBLE,
+            checked_at TIMESTAMP
+        ) USING DELTA
+    """)
+    _log_table_available = True
+except Exception as e:
+    print(f"Cost monitor: could not create/verify {CATALOG}.governance.cost_monitor_log ({e}). Skipping log writes this run.")
+    _log_table_available = False
 
 window_end = date.today()
 window_start = window_end - timedelta(days=_LOOKBACK_DAYS)
@@ -82,12 +94,13 @@ for r in usage_rows:
 if not log_rows:
     print("Cost monitor: no usage rows found for this project tag in the lookback window.")
 else:
-    (
-        spark.createDataFrame(log_rows, ["window_start", "window_end", "sku_name", "dbus", "estimated_usd"])
-        .withColumn("checked_at", F.current_timestamp())
-        .write.format("delta").mode("append")
-        .saveAsTable(f"{CATALOG}.governance.cost_monitor_log")
-    )
+    if _log_table_available:
+        (
+            spark.createDataFrame(log_rows, ["window_start", "window_end", "sku_name", "dbus", "estimated_usd"])
+            .withColumn("checked_at", F.current_timestamp())
+            .write.format("delta").mode("append")
+            .saveAsTable(f"{CATALOG}.governance.cost_monitor_log")
+        )
     print(
         f"Cost monitor: ~${total_usd:.2f} estimated spend over the last {_LOOKBACK_DAYS} day(s) "
         f"across {len(log_rows)} SKU(s)."
