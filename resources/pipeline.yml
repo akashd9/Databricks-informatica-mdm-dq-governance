@@ -31,8 +31,15 @@ resources:
             path: ../src/gold/gold_golden_records_account.py
       configuration:
         pipelines.reset.allowed: "false"
-      clusters:
-        - label: default
-          num_workers: 2
-          custom_tags:
-            project: mdm-dq-medallion
+      # This workspace requires serverless compute for pipelines — classic
+      # clusters (num_workers, node types) aren't an option here, found via
+      # an actual deploy attempt (INVALID_PARAMETER_VALUE: "You must use
+      # serverless compute in this workspace").
+      serverless: true
+      tags:
+        project: mdm-dq-medallion
+      # jellyfish isn't preinstalled on the serverless environment; needed
+      # by LocalDQFallback/LocalMatchMergeFallback's local fallbacks.
+      environment:
+        dependencies:
+          - jellyfish>=1.0
