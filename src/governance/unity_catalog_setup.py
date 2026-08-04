@@ -73,6 +73,15 @@ for _entity, (_config_file, _gold_table, _classification_tags) in _ENTITIES.item
         for m in _glossary_config["required_glossary_mappings"]
     )
 
+    # Column tags require the Gold table to already exist, but that table is
+    # created by the DLT pipeline's first run, not by this bootstrap script —
+    # skip gracefully rather than fail the whole setup on a fresh environment
+    # where the pipeline hasn't run yet. Re-run this script after the first
+    # pipeline run to actually apply the tags.
+    if not spark.catalog.tableExists(f"{CATALOG}.gold.{_gold_table}"):
+        print(f"Skipping column tags for {_gold_table}: table doesn't exist yet (run the pipeline first).")
+        continue
+
     for m in _glossary_config["required_glossary_mappings"]:
         _column = m["column"]
         _tags = [(t, None) for t in _classification_tags.get(_column, [])] + [("glossary", m["glossary_term"])]
