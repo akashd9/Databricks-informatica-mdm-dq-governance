@@ -25,7 +25,17 @@ spark = SparkSession.builder.getOrCreate()
 dbutils = DBUtils(spark)
 from datetime import datetime, timezone
 from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType
 from src.config_loader import load
+
+_LOG_SCHEMA = StructType([
+    StructField("entity", StringType()),
+    StructField("source", StringType()),
+    StructField("status", StringType()),
+    StructField("detail", StringType()),
+    StructField("age_hours", DoubleType()),
+    StructField("sla_hours", DoubleType()),
+])
 
 CATALOG = "mdm_dq_demo"
 
@@ -73,7 +83,7 @@ for source in _sources:
         _log_rows.append((source["entity"], source["name"], "ok", None, age_hours, sla))
 
 (
-    spark.createDataFrame(_log_rows, ["entity", "source", "status", "detail", "age_hours", "sla_hours"])
+    spark.createDataFrame(_log_rows, _LOG_SCHEMA)
     .withColumn("checked_at", F.current_timestamp())
     .write.format("delta").mode("append")
     .saveAsTable(f"{CATALOG}.governance.freshness_check_log")
