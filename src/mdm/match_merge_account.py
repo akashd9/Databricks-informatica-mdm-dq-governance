@@ -1,6 +1,12 @@
 """MDM match/merge gate for the account entity — reuses
-InformaticaMDMSaaSClient/LocalMatchMergeFallback from match_merge.py
-(customer) unchanged; only the config differs (config/account_match_rules.yml).
+InformaticaMDMSaaSClient/LocalMatchMergeFallback from mdm_clients.py
+unchanged; only the config differs (config/account_match_rules.yml).
+
+Imports from mdm_clients.py, not match_merge.py (customer) — the latter
+also registers its own @dlt.table, and DLT loads each declared pipeline
+library file in an isolated module scope, so importing classes directly
+from match_merge.py would re-execute that table registration a second time
+here (a real "Found duplicate table" error this split fixes).
 """
 
 import os
@@ -13,18 +19,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
 
 import dlt
 from src.config_loader import load
-from src.mdm.match_merge import InformaticaMDMSaaSClient, LocalMatchMergeFallback
-
-
-def _get_dbutils():
-    # Lazy import: pyspark.dbutils only exists on real Databricks Runtime,
-    # not the open-source pyspark package this module also needs to import
-    # cleanly under (local tests, CI).
-    from pyspark.sql import SparkSession
-    from pyspark.dbutils import DBUtils
-
-    return DBUtils(SparkSession.builder.getOrCreate())
-
+from src.mdm.mdm_clients import InformaticaMDMSaaSClient, LocalMatchMergeFallback, _get_dbutils
 
 _MATCH_CONFIG = load("account_match_rules.yml")
 
