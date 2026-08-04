@@ -3,6 +3,8 @@ __pycache__/
 .pytest_cache/
 .databricks/
 .venv/
+.git_commit_msg.txt
+.tmp_*.json
 
 # Terraform
 terraform/.terraform/
