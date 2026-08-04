@@ -1,0 +1,43 @@
+resources:
+  jobs:
+    mdm_dq_medallion_job:
+      name: mdm-dq-medallion-orchestration-${bundle.target}
+      # Each task is a gate: a failure here halts the run instead of letting
+      # ungoverned or unmonitored data reach downstream consumers.
+      tasks:
+        - task_key: freshness_gate
+          notebook_task:
+            notebook_path: ../src/observability/freshness_checks.py
+
+        - task_key: run_medallion_pipeline
+          depends_on:
+            - task_key: freshness_gate
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.mdm_dq_medallion_pipeline.id}
+
+        - task_key: anomaly_gate
+          depends_on:
+            - task_key: run_medallion_pipeline
+          notebook_task:
+            notebook_path: ../src/observability/anomaly_gate.py
+
+        - task_key: glossary_lineage_gate
+          depends_on:
+            - task_key: anomaly_gate
+          notebook_task:
+            notebook_path: ../src/governance/glossary_gate.py
+
+        - task_key: refresh_drift_monitor
+          depends_on:
+            - task_key: glossary_lineage_gate
+          notebook_task:
+            notebook_path: ../src/observability/drift_monitor.py
+
+      schedule:
+        quartz_cron_expression: "0 0 * * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}

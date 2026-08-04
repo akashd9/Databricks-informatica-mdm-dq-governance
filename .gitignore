@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.databricks/
+.venv/
+
+# Terraform
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+terraform/tfplan*
+# .terraform.lock.hcl is intentionally tracked (pins provider versions)

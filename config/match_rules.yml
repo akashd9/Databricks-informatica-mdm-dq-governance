@@ -1,0 +1,34 @@
+entity: customer
+
+blocking_keys:
+  - [country_code, postal_code_prefix]
+  - [email_domain, last_name_soundex]
+
+match_attributes:
+  - column: full_name
+    method: jaro_winkler
+    weight: 0.35
+  - column: email
+    method: exact
+    weight: 0.25
+  - column: tax_id
+    method: exact
+    weight: 0.25
+  - column: address_line1
+    method: jaro_winkler
+    weight: 0.15
+
+match_threshold: 0.82
+auto_merge_threshold: 0.93
+
+survivorship:
+  strategy: source_priority_then_recency
+  source_priority: [erp, crm, partner_api, flatfile]
+
+# Governs the call-out to Informatica MDM SaaS batch match/merge API. When
+# disabled, the local GraphFrames-based fallback in match_merge.py runs
+# instead, using the attributes/threshold above.
+informatica_mdm:
+  enabled: false # flip to true once MDM connectivity/secrets are configured
+  business_entity: Customer
+  match_rule_set: CUST_MATCH_RULESET_V1

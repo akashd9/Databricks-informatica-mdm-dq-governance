@@ -1,0 +1,159 @@
+"""MDM match/merge gate. Informatica MDM SaaS's batch match API is the
+primary path; a local GraphFrames-based fallback (blocking + pairwise
+Jaro-Winkler scoring + connected-components clustering) covers dev/demo
+before that connectivity is configured. Both paths converge on the same
+output contract: (golden_id, member_customer_id, match_confidence) — a
+cluster assignment, not a merged record. The actual golden record is built
+by survivorship.py from these clusters.
+"""
+import abc
+import time
+import dlt
+from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.types import DoubleType
+from src.config_loader import load
+
+_MATCH_CONFIG = load("match_rules.yml")
+
+
+class InformaticaMDMClient(abc.ABC):
+    @abc.abstractmethod
+    def match_merge(self, df: DataFrame) -> DataFrame:
+        """Return match_groups: golden_id, member_customer_id, match_confidence."""
+
+
+class InformaticaMDMSaaSClient(InformaticaMDMClient):
+    """Calls Informatica MDM SaaS (Customer 360 / IDMC MDM) batch match API:
+    stage the DQ-passed candidate set, trigger the configured match rule set,
+    poll the job, read back match groups. golden_id here is Informatica's
+    Base Object ID (BOID) for the consolidated record.
+    """
+
+    def __init__(self, base_url: str, business_entity: str, rule_set: str, secret_scope: str = "informatica"):
+        self.base_url = base_url.rstrip("/")
+        self.business_entity = business_entity
+        self.rule_set = rule_set
+        self.secret_scope = secret_scope
+
+    def _headers(self) -> dict:
+        return {"INFA-SESSION-ID": dbutils.secrets.get(self.secret_scope, "session_token")}
+
+    def match_merge(self, df: DataFrame) -> DataFrame:
+        import requests
+
+        staging_path = f"/Volumes/mdm_dq_demo/staging/informatica/mdm_batch/{int(time.time())}"
+        df.write.format("delta").mode("overwrite").save(staging_path)
+
+        resp = requests.post(
+            f"{self.base_url}/mdm/batch/v1/match",
+            headers=self._headers(),
+            json={
+                "businessEntity": self.business_entity,
+                "matchRuleSet": self.rule_set,
+                "sourcePath": staging_path,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        job_id = resp.json()["jobId"]
+
+        status = "RUNNING"
+        while status == "RUNNING":
+            time.sleep(10)
+            poll = requests.get(f"{self.base_url}/mdm/batch/v1/jobs/{job_id}", headers=self._headers(), timeout=30)
+            poll.raise_for_status()
+            status = poll.json()["status"]
+
+        if status != "SUCCESS":
+            raise RuntimeError(f"Informatica MDM match job {job_id} ended in {status}")
+
+        return spark.read.format("delta").load(poll.json()["matchGroupsPath"])
+
+
+class LocalMatchMergeFallback(InformaticaMDMClient):
+    """Blocking on (country_code, postal_code prefix) + pairwise Jaro-Winkler
+    name scoring + connected-components clustering via GraphFrames. Used in
+    dev/demo when Informatica MDM isn't reachable. Requires the GraphFrames
+    Maven library attached to the cluster and `jellyfish` on the driver.
+    """
+
+    def __init__(self, config: dict):
+        self.config = config
+
+    def match_merge(self, df: DataFrame) -> DataFrame:
+        from graphframes import GraphFrame
+        import jellyfish
+        import pandas as pd
+
+        blocked = df.withColumn(
+            "block_key",
+            F.concat_ws("|", F.col("country_code"), F.substring(F.col("postal_code"), 1, 3)),
+        )
+
+        left = blocked.select(
+            F.col("customer_id").alias("id_a"), F.col("full_name").alias("name_a"),
+            F.col("email").alias("email_a"), F.col("tax_id").alias("tax_a"),
+            F.col("block_key"),
+        )
+        right = blocked.select(
+            F.col("customer_id").alias("id_b"), F.col("full_name").alias("name_b"),
+            F.col("email").alias("email_b"), F.col("tax_id").alias("tax_b"),
+            F.col("block_key"),
+        )
+        pairs = left.join(right, on="block_key").filter(F.col("id_a") < F.col("id_b"))
+
+        @F.pandas_udf(DoubleType())
+        def jw_sim(a: pd.Series, b: pd.Series) -> pd.Series:
+            return a.combine(b, lambda x, y: jellyfish.jaro_winkler_similarity(x or "", y or ""))
+
+        scored = (
+            pairs.withColumn("name_sim", jw_sim("name_a", "name_b"))
+            .withColumn("email_match", (F.col("email_a") == F.col("email_b")).cast("double"))
+            .withColumn("tax_match", (F.col("tax_a") == F.col("tax_b")).cast("double"))
+            .withColumn(
+                "match_confidence",
+                F.col("name_sim") * 0.5 + F.col("email_match") * 0.3 + F.col("tax_match") * 0.2,
+            )
+            .filter(F.col("match_confidence") >= self.config["match_threshold"])
+        )
+
+        vertices = df.select(F.col("customer_id").alias("id")).distinct()
+        edges = scored.select(F.col("id_a").alias("src"), F.col("id_b").alias("dst"), "match_confidence")
+
+        gf = GraphFrame(vertices, edges)
+        components = gf.connectedComponents()
+
+        edge_conf = (
+            edges.select(F.col("src").alias("id"), "match_confidence")
+            .unionByName(edges.select(F.col("dst").alias("id"), "match_confidence"))
+            .groupBy("id")
+            .agg(F.avg("match_confidence").alias("match_confidence"))
+        )
+
+        return (
+            components.withColumnRenamed("component", "golden_id")
+            .withColumnRenamed("id", "member_customer_id")
+            .join(edge_conf.withColumnRenamed("id", "member_customer_id"), on="member_customer_id", how="left")
+            .fillna({"match_confidence": 1.0})  # singleton cluster: no match pair, trivially "self-matched"
+        )
+
+
+_client = (
+    InformaticaMDMSaaSClient(
+        base_url=dbutils.secrets.get("informatica", "mdm_base_url"),
+        business_entity=_MATCH_CONFIG["informatica_mdm"]["business_entity"],
+        rule_set=_MATCH_CONFIG["informatica_mdm"]["match_rule_set"],
+    )
+    if _MATCH_CONFIG["informatica_mdm"]["enabled"]
+    else LocalMatchMergeFallback(_MATCH_CONFIG)
+)
+
+
+@dlt.table(
+    name="silver_customer_match_groups",
+    comment="Cluster assignments from Informatica MDM (or local fallback) mapping DQ-passed records to a golden_id.",
+    table_properties={"quality": "silver"},
+)
+def silver_customer_match_groups():
+    return _client.match_merge(dlt.read("silver_customer_dq_passed"))

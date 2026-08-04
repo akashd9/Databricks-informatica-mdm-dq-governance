@@ -1,0 +1,9 @@
+# Driver/dev dependencies. GraphFrames (used by src/mdm/match_merge.py's
+# local fallback) is a JVM package attached as a Maven cluster library
+# (graphframes:graphframes:0.8.3-spark3.5-s_2.12), not installed via pip.
+pyyaml>=6.0
+requests>=2.31
+jellyfish>=1.0
+databricks-sdk>=0.20
+pyspark>=3.5
+pytest>=7.4

@@ -1,0 +1,25 @@
+sources:
+  - name: erp
+    format: parquet
+    landing_path: /Volumes/mdm_dq_demo/landing/erp/customers
+    entity: customer
+    priority: 1
+    freshness_sla_hours: 24
+  - name: crm
+    format: json
+    landing_path: /Volumes/mdm_dq_demo/landing/crm/customers
+    entity: customer
+    priority: 2
+    freshness_sla_hours: 6
+  - name: flatfile
+    format: csv
+    landing_path: /Volumes/mdm_dq_demo/landing/flatfiles/customers
+    entity: customer
+    priority: 3
+    freshness_sla_hours: 24
+  - name: partner_api
+    format: json
+    landing_path: /Volumes/mdm_dq_demo/landing/api/customers
+    entity: customer
+    priority: 4
+    freshness_sla_hours: 2

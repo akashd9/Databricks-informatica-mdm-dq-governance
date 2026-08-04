@@ -1,0 +1,17 @@
+entity: customer
+
+# Every column listed here MUST have a row in governance.business_glossary
+# before gold_customer_golden is allowed to be considered "passing" by the
+# glossary_lineage_gate job task — this is what makes glossary coverage an
+# enforced gate rather than documentation that lives beside the pipeline.
+required_glossary_mappings:
+  - column: golden_id
+    glossary_term: Customer Golden Record ID
+  - column: customer_name
+    glossary_term: Customer Legal Name
+  - column: tax_id
+    glossary_term: Tax Identification Number
+  - column: email
+    glossary_term: Customer Contact Email
+  - column: dq_score
+    glossary_term: Data Quality Score

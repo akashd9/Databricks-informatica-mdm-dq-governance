@@ -1,0 +1,27 @@
+resources:
+  pipelines:
+    mdm_dq_medallion_pipeline:
+      name: mdm-dq-medallion-${bundle.target}
+      catalog: ${var.catalog}
+      target: silver
+      channel: PREVIEW
+      photon: true
+      continuous: false
+      libraries:
+        - file:
+            path: ../src/bronze/bronze_ingest.py
+        - file:
+            path: ../src/silver/silver_transform.py
+        - file:
+            path: ../src/quality/dq_gate.py
+        - file:
+            path: ../src/mdm/match_merge.py
+        - file:
+            path: ../src/gold/gold_golden_records.py
+      configuration:
+        pipelines.reset.allowed: "false"
+      clusters:
+        - label: default
+          num_workers: 2
+          custom_tags:
+            project: mdm-dq-medallion

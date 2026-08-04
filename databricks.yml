@@ -1,0 +1,22 @@
+bundle:
+  name: mdm-dq-medallion
+
+variables:
+  catalog:
+    default: mdm_dq_demo
+
+include:
+  - resources/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://<your-workspace-host>
+  prod:
+    mode: production
+    workspace:
+      host: https://<your-workspace-host>
+    variables:
+      catalog: mdm_dq_prod

@@ -1,0 +1,35 @@
+entity: customer
+
+# Fast, deterministic checks the DLT pipeline enforces directly as expectations.
+rules:
+  - name: customer_id_not_null
+    column: customer_id
+    type: not_null
+    severity: critical
+  - name: name_not_null
+    column: full_name
+    type: not_null
+    severity: critical
+  - name: email_format_valid
+    column: email
+    type: regex
+    pattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    severity: warn
+  - name: country_code_valid
+    column: country_code
+    type: allowed_values
+    values: [US, CA, UK, IN, DE, FR, AU]
+    severity: warn
+  - name: tax_id_format
+    column: tax_id
+    type: regex
+    pattern: '^[A-Z0-9\-]{5,20}$'
+    severity: warn
+
+# Governs the call-out to Informatica IDMC Cloud Data Quality for checks that
+# should stay centrally managed (standardization dictionaries, address
+# validation, dedup-readiness scoring) instead of being reimplemented here.
+informatica_dq:
+  enabled: false # flip to true once IDMC connectivity/secrets are configured
+  mapping_name: CUST_STD_VALIDATION_MAPPING
+  min_dq_score_for_gold: 0.85

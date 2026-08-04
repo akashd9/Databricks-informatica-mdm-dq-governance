@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and fill in real values, OR set these as
+# TF_VAR_<name> environment variables instead. terraform.tfvars is
+# gitignored on purpose — never commit real endpoints/tokens.
+
+databricks_profile = "lakehouse-demo" # profile name in ~/.databrickscfg
+catalog_name        = "mdm_dq_demo"
+
+# The catalog itself must be created once via the UI (Catalog Explorer >
+# Create Catalog, storage left as Default), then imported:
+#   terraform import databricks_catalog.this mdm_dq_demo
+# — this account's Default Storage setting rejects catalog creation via the
+# API. Everything else below applies normally.
+
+# Informatica — leave as REPLACE_ME here and pass the real values via
+# TF_VAR_informatica_* env vars instead, especially the session token.
+informatica_idmc_base_url = "https://REPLACE_ME.informaticacloud.com"
+informatica_mdm_base_url  = "https://REPLACE_ME-mdm.informaticacloud.com"
+# informatica_session_token intentionally omitted — set via
+# TF_VAR_informatica_session_token so it never lands in a file.
