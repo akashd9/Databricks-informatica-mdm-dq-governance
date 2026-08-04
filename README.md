@@ -147,39 +147,44 @@ not just a customer-specific pipeline with governance bolted on.
 
 ## Measurable KPIs
 
-Two kinds below: KPIs already **pilot-validated** (real numbers, from
-`pilot/generate_pilot_dataset.py` → `pilot/run_pilot_validation.py`, see
-`pilot/PILOT_REPORT.md` for the full threshold sweep) against a synthetic
-528-record dataset, and KPIs that stay **targets** until this runs against
-real production volume and live Informatica scoring.
+Three kinds below: **pilot-validated** (from `pilot/run_pilot_validation.py`
+against a synthetic 528-record dataset, see `pilot/PILOT_REPORT.md`),
+**live-run-measured** (from the actual full job run against
+`lakehouse-demo`, both entities), and targets that still need a real
+schedule or live Informatica to measure.
 
 | KPI | Source | Status |
 |---|---|---|
-| DQ pass rate | `silver_customer_dq_passed` ÷ `silver_customer_dq_scored` | Target ≥ 85% (`min_dq_score_for_gold`); pilot-measured 95.6% at that threshold |
-| DQ quarantine rate | `silver_customer_dq_quarantine` ÷ `silver_customer_dq_scored`, daily | Target < 15% (anomaly gate halts above this); pilot-measured 4.4% |
-| De-duplication rate | 1 − (`gold_customer_golden` rows ÷ `silver_customer_dq_passed` rows) | Pilot-measured 61.0% at tuned `match_threshold: 0.65` |
-| Match precision / recall | pairwise, vs. known ground truth | Pilot-measured 1.000 / 1.000 at tuned threshold (was 1.000 / 0.603 at the untuned default 0.82 — see `PILOT_REPORT.md`) |
-| Average match confidence | `avg(match_confidence)` on `gold_customer_golden` | Pilot-measured 0.892 |
-| Glossary coverage | required columns with a `governance.business_glossary` mapping | 100% (hard gate — job fails otherwise) |
-| Lineage confirmation | `glossary_lineage_gate` task pass rate | Target 100% of scheduled runs — not yet run on a live schedule |
-| Freshness SLA compliance | `governance.freshness_check_log`, per-source | Target 100% of scheduled runs — table exists, no history yet |
-| Gold volume anomaly rate | `anomaly_gate` z-score breaches (\|z\| > 3) | Target 0 unexplained breaches/month — needs ≥3 days of history first |
-| Pipeline compute spend | `governance.cost_monitor_log` (`system.billing.usage`) | Target < `daily_budget_usd` soft threshold — no runs yet to measure |
-| Time-to-Gold latency | Bronze ingestion timestamp → `merged_at` on Gold | Target — track once running on a real schedule |
+| DQ pass rate | `silver_customer_dq_passed` ÷ `silver_customer_dq_scored` | Target ≥ 85%; pilot-measured 95.6% |
+| DQ quarantine rate | `silver_customer_dq_quarantine` ÷ `silver_customer_dq_scored`, daily | Target < 15%; pilot-measured 4.4% |
+| De-duplication rate | 1 − (Gold rows ÷ DQ-passed rows) | Pilot-measured 61.0% (customer); **live-run-measured 36.2%** (account: 47 raw → 30 golden) |
+| Match precision / recall | pairwise, vs. known ground truth | Pilot-measured 1.000 / 1.000 at tuned threshold (was 1.000 / 0.603 untuned — see `PILOT_REPORT.md`) |
+| Average match confidence | `avg(match_confidence)` on Gold | Pilot-measured 0.892 |
+| review_status distribution | Gold table, live run | **Live-measured**: customer — single_source 45, needs_review 88, auto_merged 64 (n=197); account — single_source 13, auto_merged 17 (n=30) |
+| Glossary coverage | required columns with a `governance.business_glossary` mapping | **Live-measured: 100%** — `glossary_lineage_gate` passed on a real run, 9 terms registered |
+| Lineage confirmation | `glossary_lineage_gate` task pass rate | **Live-measured: passed** on the one real run so far; needs a scheduled run to report a rate |
+| Freshness SLA compliance | `governance.freshness_check_log`, per-source | **Live-measured: passed** for all 6 sources (4 customer + 2 account) on the one real run |
+| Gold volume anomaly rate | `anomaly_gate` z-score breaches (\|z\| > 3) | Live-run: skipped (< 3 days of history, by design) — target 0 unexplained breaches/month once there's history |
+| Pipeline compute spend | `governance.cost_monitor_log` | Live-run: gate passed, but log write itself was skipped — hit a metastore-wide UC table quota (500/500), not a pipeline bug |
+| Steward review queue backlog | `governance.steward_review_queue` | **Live-measured: 98 items** queued from the one real run (DQ quarantine + needs_review matches, both entities) |
+| Time-to-Gold latency | Bronze ingestion timestamp → `merged_at` | Target — track across multiple scheduled runs |
 
-Caveat on the pilot numbers: synthetic data, not real Informatica scoring —
-see `pilot/PILOT_REPORT.md`'s "known limitation" section (source-prefixed
-IDs sidestep a real cross-source ID-collision risk) before treating these as
-production-representative.
+Caveat on the pilot numbers specifically: synthetic data, not real
+Informatica scoring — see `pilot/PILOT_REPORT.md`'s "known limitation"
+section (source-prefixed IDs sidestep a real cross-source ID-collision
+risk) before treating those as production-representative. The live-run
+numbers are real executions against real (if synthetic) uploaded data, not
+simulated — see [Business Result / Impact](#business-result--impact) for
+what that run actually did.
 
 ## SWOT Overview
 
 | | |
 |---|---|
-| **Strengths** | Enforced (not advisory) gates; config-driven rules pilot-tuned against real measured precision/recall, not just asserted; two entities on one shared, generalized gate pattern; Informatica abstracted behind an interface so the pipeline runs today without live credentials; infra as code, applied and live, not just planned; CI runs the full test suite (incl. Spark-backed tests via a JVM) and validates the bundle against the real workspace on every push; steward review and glossary submissions are live feedback loops, not read-only reports. |
-| **Weaknesses** | Local DQ/MDM fallbacks are simplistic compared to real Informatica IDQ/MDM accuracy and untested against real Informatica; local match/merge clustering collects matched pairs to the driver for union-find (fine at pilot scale, needs revisiting at high production volume); Informatica secrets are still placeholders (`enabled: false`) — nothing has run against live IDMC/MDM yet; Terraform state is local-only (backend scaffolded in `terraform/backend.tf.example`, not activated — needs AWS credentials this project doesn't have); match/merge and survivorship assume each source's raw ID is globally unique, which real ERP/CRM systems won't guarantee (see `PILOT_REPORT.md`); SLA dashboard is SQL queries, not a deployed Lakeview dashboard (avoided hand-fabricating unverified widget JSON). |
-| **Opportunities** | Wire real Informatica credentials once available and re-run pilot validation against live scoring; extend the same pattern to a third entity (product); activate the remote Terraform backend once AWS access exists; build a proper UI on top of the steward review queue instead of raw Delta table inserts; resolve the multi-region design question in `docs/multi-region-considerations.md` if data residency becomes a real requirement. |
-| **Threats** | Informatica API/schema changes breaking the REST client contract (untested against the real API); DQ/match thresholds tuned on synthetic data drifting out of tune against real data's actual error patterns; monitoring/compute cost at production volume (cost_monitor.py's price table is a rough estimate, not billing-accurate); governance gates becoming a rubber stamp if glossary/lineage checks aren't kept current as schemas evolve; the raw-ID-collision gap becoming a real production match/merge bug the pilot's clean synthetic IDs never surfaced. |
+| **Strengths** | **Actually run end-to-end against the live workspace, not just validated** — all 8 orchestration tasks SUCCESS in one real run, with real (if synthetic) data producing real golden records; enforced (not advisory) gates; config-driven rules pilot-tuned against real measured precision/recall; two entities on one shared, generalized gate pattern, proven by that same live run; Informatica abstracted behind an interface so the pipeline runs today without live credentials; infra as code, applied and live; CI validates the bundle against the real workspace on every push; steward review and glossary submissions are live feedback loops that populated real data (98 queue items, 9 glossary terms) on that run. |
+| **Weaknesses** | Bronze/silver/gold **schema** separation isn't real — `pipeline.yml`'s `target: silver` puts every table in one schema regardless of name prefix, confirmed by the live run (`SHOW TABLES IN mdm_dq_demo.gold` is empty); local DQ/MDM fallbacks are simplistic compared to real Informatica IDQ/MDM accuracy and untested against real Informatica; local match/merge clustering collects matched pairs to the driver for union-find (fine at pilot/demo scale — the live run's 47-account and 528-customer-record volumes — needs revisiting at real production volume); Informatica secrets are still placeholders (`enabled: false`); Terraform state is local-only; match/merge and survivorship assume each source's raw ID is globally unique, which real ERP/CRM systems won't guarantee; SLA dashboard is SQL queries, not a deployed Lakeview dashboard; this workspace's shared Unity Catalog metastore is at its 500-table quota, which silently limits how much more this project (or anything else in this workspace) can create. |
+| **Opportunities** | Fix the schema-separation gap properly (per-table `@dlt.table(name="schema.table")` qualification — approach already documented in `glossary_gate.py`) now that the pipeline is proven stable enough to risk touching again; wire real Informatica credentials once available and re-run pilot validation against live scoring; extend the same pattern to a third entity (product); activate the remote Terraform backend once AWS access exists; build a proper UI on top of the steward review queue instead of raw Delta table inserts; resolve the multi-region design question in `docs/multi-region-considerations.md` if data residency becomes a real requirement. |
+| **Threats** | Informatica API/schema changes breaking the REST client contract (untested against the real API); DQ/match thresholds tuned on synthetic data drifting out of tune against real data's actual error patterns; monitoring/compute cost at production volume (cost_monitor.py's price table is a rough estimate, not billing-accurate); governance gates becoming a rubber stamp if glossary/lineage checks aren't kept current as schemas evolve; the raw-ID-collision gap becoming a real production match/merge bug the pilot's clean synthetic IDs never surfaced; the shared metastore's table quota blocking future growth of this project regardless of code quality. |
 
 ## Roadmap
 
@@ -384,28 +389,60 @@ activation steps.
 
 ## Business Result / Impact
 
-The infrastructure is live and validated (Unity Catalog objects applied via
-Terraform with zero drift, the Databricks Asset Bundle validates against the
-real workspace for both `dev` and `prod` targets, all 4 unit-testable
-components pass), and the match/merge and DQ thresholds are backed by real
-measured precision/recall against a pilot dataset — not just asserted
-defaults. What hasn't happened yet: a scheduled run against real production
-volume, and anything running through live Informatica IDMC/MDM (still
-`enabled: false`, pending real tenant credentials). The impact below is
-therefore **the design intent this architecture targets**, substantially
-de-risked by the pilot validation and live infra, but not yet a measured
-production outcome:
+**The full orchestration job has actually run end to end against the live
+workspace** — not just validated, executed: all 8 tasks (freshness gate →
+DLT pipeline → anomaly gate, steward queue refresh, glossary submissions,
+glossary/lineage gate → cost monitor → drift monitor) completed
+`SUCCESS` in one run. Real output from that run: **197 customer golden
+records** (`single_source`: 45, `needs_review`: 88, `auto_merged`: 64) and
+**30 account golden records** (`single_source`: 13, `auto_merged`: 17), 98
+items landed in the steward review queue, 9 glossary terms registered and
+gate-checked. The 197 figure matches the pilot-tuned threshold's prediction
+exactly (see `pilot/PILOT_REPORT.md`), which is a meaningful cross-check
+that the pilot validation and the live pipeline agree.
 
-- Replace ad hoc, post-hoc deduplication with a systematic, config-driven
-  match/merge gate — reducing the audit burden of explaining "why does this
-  customer appear three times."
-- Convert governance and observability from a periodic manual review into a
-  per-run automated gate, shrinking the window between a data quality
-  regression occurring and it being caught.
-- Give downstream consumers (analytics, risk/compliance reporting) a Gold
-  table that carries its own quality and lineage evidence, rather than
-  requiring a separate governance sign-off process.
+Getting there surfaced **8 real bugs** no amount of `terraform validate` or
+`databricks bundle validate` could have caught, because none of them are
+config-syntax problems — they only exist when the code actually executes
+against a live cluster: a Maven library (GraphFrames) gated behind Private
+Preview on this workspace; a hard `serverless: true` requirement this
+workspace enforces; job `notebook_task` runs not getting the same
+`sys.path`/`spark`/`dbutils` injection DLT pipeline library files get;
+`pyspark.dbutils` not existing in open-source PySpark (breaking local/CI
+imports); a bootstrap-ordering dependency on a table the pipeline itself
+creates; DLT's schema-resolution phase probing table functions with
+empty/mock input, which broke naive `spark.createDataFrame` calls twice in
+different files; an ambiguous-column bug from two DataFrames sharing a
+`match_confidence` name; and a metastore-wide Unity Catalog table quota
+shared with every other demo catalog in the workspace. Every one is fixed
+and committed — see the git history for the specific commit per bug.
 
-Once Phase 1 (Informatica cutover) runs against real data, the KPI table
-above becomes the basis for reporting actual — not targeted — DQ pass rate,
-match quality, and gate reliability.
+One real, known gap this run also surfaced and left deliberately unfixed:
+`pipeline.yml`'s `target: silver` routes every declared table into one
+schema regardless of its bronze_/silver_/gold_ name prefix, so the intended
+bronze/silver/gold **schema** separation isn't real yet — everything lives
+under `mdm_dq_demo.silver`, confirmed by `SHOW TABLES IN mdm_dq_demo.gold`
+returning nothing. Consumer scripts were patched to query the actual
+location; the proper fix (per-table schema qualification in every
+`@dlt.table(name=...)`) is documented in `src/governance/glossary_gate.py`
+but not applied, to avoid risking a pipeline that took 8 real fixes to get
+working for the first time.
+
+Still not done: anything through live Informatica IDMC/MDM (still
+`enabled: false`, pending real tenant credentials — see the credential
+back-and-forth earlier in this project's history) and a real S3 bucket for
+Terraform's remote state backend. Both are blocked on something outside
+this codebase, not on more code.
+
+What this run demonstrates, concretely rather than aspirationally:
+
+- Match/merge actually deduplicates real (synthetic but structurally
+  realistic) multi-source records — 47 raw account records became 30
+  golden records; the review_status split shows both auto-merge and
+  steward-review paths are live, not just designed.
+- Governance and observability gates actually halt or pass based on live
+  Unity Catalog/lineage state, not a mocked check — the glossary/lineage
+  gate queried `system.access.table_lineage` for real and passed.
+- The steward review queue actually aggregates real quarantine and
+  low-confidence-match records (98 items) from a live run, ready for a
+  human to act on.
