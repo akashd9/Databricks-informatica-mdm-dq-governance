@@ -23,16 +23,25 @@ for _entity, (_gold_table, _slicing_exprs) in _ENTITIES.items():
     # src/governance/glossary_gate.py.
     table = f"{CATALOG}.silver.{_gold_table}"
     try:
-        w.quality_monitors.get(table_name=table)
-    except Exception:
-        w.quality_monitors.create(
-            table_name=table,
-            assets_dir=f"/Workspace/mdm-dq-medallion/monitoring/{CATALOG}/{_entity}",
-            output_schema_name=f"{CATALOG}.governance",
-            time_series=MonitorTimeSeries(timestamp_col="merged_at", granularities=["1 day"]),
-            slicing_exprs=_slicing_exprs,
-        )
-        print(f"Created Lakehouse Monitor for {table}.")
+        try:
+            w.quality_monitors.get(table_name=table)
+        except Exception:
+            w.quality_monitors.create(
+                table_name=table,
+                assets_dir=f"/Workspace/mdm-dq-medallion/monitoring/{CATALOG}/{_entity}",
+                output_schema_name=f"{CATALOG}.governance",
+                time_series=MonitorTimeSeries(timestamp_col="merged_at", granularities=["1 day"]),
+                slicing_exprs=_slicing_exprs,
+            )
+            print(f"Created Lakehouse Monitor for {table}.")
 
-    w.quality_monitors.run_refresh(table_name=table)
-    print(f"Triggered drift/profile refresh for {table}.")
+        w.quality_monitors.run_refresh(table_name=table)
+        print(f"Triggered drift/profile refresh for {table}.")
+    except Exception as e:
+        # A monitor creates its own profile/drift metric tables — on a
+        # shared metastore already at its account-wide table quota (a real
+        # limit hit running this pipeline, see cost_monitor.py's identical
+        # handling), that's outside this project's control. Skip this
+        # entity's monitor rather than fail the whole task and block
+        # whatever else depends on it succeeding.
+        print(f"Drift monitor for {table} skipped: {e}")
