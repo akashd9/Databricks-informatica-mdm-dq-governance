@@ -4,6 +4,14 @@ a non-null golden_id (proof match/merge actually ran) and a minimum DQ
 score. Either failing condition fails the whole pipeline update via
 expect_or_fail, rather than silently publishing a partial Gold table.
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
 import dlt
 from pyspark.sql import functions as F
 from src.config_loader import load

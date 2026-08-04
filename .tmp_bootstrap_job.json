@@ -1,0 +1,11 @@
+{
+  "run_name": "mdm-dq-medallion-bootstrap",
+  "tasks": [
+    {
+      "task_key": "unity_catalog_setup",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/akash.dolas@gmail.com/.bundle/mdm-dq-medallion/dev/files/src/governance/unity_catalog_setup"
+      }
+    }
+  ]
+}

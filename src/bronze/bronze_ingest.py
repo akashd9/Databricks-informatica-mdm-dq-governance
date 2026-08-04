@@ -3,6 +3,21 @@ is cleaned or conformed here — we just land raw records with provenance
 columns (_source_system, _source_priority, _ingested_at) that every
 downstream gate relies on for lineage and survivorship.
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
+
+from pyspark.sql import SparkSession
+
+# Explicit acquisition rather than relying on the injected notebook global:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see that global.
+spark = SparkSession.builder.getOrCreate()
 import dlt
 from pyspark.sql import functions as F
 from src.config_loader import load

@@ -10,6 +10,13 @@ the same contract: given a DataFrame, return it with dq_score (double) and
 dq_issues (comma-separated string) columns added, so the DQ gate doesn't care
 which one ran.
 """
+
+from pyspark.sql import SparkSession
+
+# Explicit acquisition rather than relying on the injected notebook global:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see that global.
+spark = SparkSession.builder.getOrCreate()
 import abc
 import time
 from pyspark.sql import DataFrame
@@ -35,6 +42,12 @@ class InformaticaCloudDQClient(InformaticaDQClient):
         self.secret_scope = secret_scope
 
     def _headers(self) -> dict:
+        # Lazy import: pyspark.dbutils only exists on real Databricks
+        # Runtime, not the open-source pyspark package this module also
+        # needs to import cleanly under (local tests, CI).
+        from pyspark.dbutils import DBUtils
+
+        dbutils = DBUtils(spark)
         return {"INFA-SESSION-ID": dbutils.secrets.get(self.secret_scope, "session_token")}
 
     def score(self, df: DataFrame, mapping_name: str) -> DataFrame:

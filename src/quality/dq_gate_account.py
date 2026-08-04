@@ -3,18 +3,38 @@
 override mechanism unchanged; only the config differs
 (config/account_dq_rules.yml).
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
+
 import dlt
 from pyspark.sql import functions as F
 from src.config_loader import load
 from src.quality.dq_rules import InformaticaCloudDQClient, LocalDQFallback
 from src.governance.steward_review import get_approved_override_ids
 
+
+def _get_dbutils():
+    # Lazy import: pyspark.dbutils only exists on real Databricks Runtime,
+    # not the open-source pyspark package this module also needs to import
+    # cleanly under (local tests, CI).
+    from pyspark.sql import SparkSession
+    from pyspark.dbutils import DBUtils
+
+    return DBUtils(SparkSession.builder.getOrCreate())
+
+
 _DQ_CONFIG = load("account_dq_rules.yml")
 _MIN_SCORE = _DQ_CONFIG["informatica_dq"]["min_dq_score_for_gold"]
 _MAPPING = _DQ_CONFIG["informatica_dq"]["mapping_name"]
 
 _client = (
-    InformaticaCloudDQClient(base_url=dbutils.secrets.get("informatica", "idmc_base_url"))
+    InformaticaCloudDQClient(base_url=_get_dbutils().secrets.get("informatica", "idmc_base_url"))
     if _DQ_CONFIG["informatica_dq"]["enabled"]
     else LocalDQFallback(_DQ_CONFIG["rules"])
 )

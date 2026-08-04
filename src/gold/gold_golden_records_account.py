@@ -4,6 +4,14 @@ generic, taking config as a parameter with no entity-specific assumptions);
 only the config and output column selection differ from gold_golden_records.py
 (customer).
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
 import dlt
 from pyspark.sql import functions as F
 from src.config_loader import load

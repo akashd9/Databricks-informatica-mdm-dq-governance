@@ -6,6 +6,23 @@ here rather than building a golden record on stale inputs. Every check
 dashboard (see dashboards/sla_dashboard_queries.sql) reads this table for
 freshness compliance over time, which nothing else in the pipeline persists.
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
+
+from pyspark.sql import SparkSession
+from pyspark.dbutils import DBUtils
+
+# Explicit acquisition rather than relying on injected notebook globals:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see them.
+spark = SparkSession.builder.getOrCreate()
+dbutils = DBUtils(spark)
 from datetime import datetime, timezone
 from pyspark.sql import functions as F
 from src.config_loader import load

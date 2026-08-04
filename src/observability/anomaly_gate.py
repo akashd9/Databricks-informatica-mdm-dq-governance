@@ -5,6 +5,13 @@ considered successful. For every registered entity, flags volume anomalies
 spikes — catching regressions immediately rather than waiting for the next
 scheduled Lakehouse Monitoring refresh.
 """
+
+from pyspark.sql import SparkSession
+
+# Explicit acquisition rather than relying on the injected notebook global:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see that global.
+spark = SparkSession.builder.getOrCreate()
 CATALOG = "mdm_dq_demo"
 _Z_THRESHOLD = 3.0
 _QUARANTINE_RATE_THRESHOLD = 0.15

@@ -5,6 +5,14 @@ a separate file rather than a generic loop over entities so each entity's
 DLT tables stay simple, static, and independently readable, matching how
 Databricks pipelines are conventionally organized.
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
 import dlt
 from pyspark.sql import functions as F
 from src.config_loader import load

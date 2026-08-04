@@ -6,6 +6,21 @@ contract: (golden_id, member_customer_id, match_confidence) — a cluster
 assignment, not a merged record. The actual golden record is built by
 survivorship.py from these clusters.
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
+
+from pyspark.sql import SparkSession
+
+# Explicit acquisition rather than relying on the injected notebook global:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see that global.
+spark = SparkSession.builder.getOrCreate()
 import abc
 import time
 import dlt
@@ -15,6 +30,15 @@ from pyspark.sql.types import DoubleType
 from src.config_loader import load
 
 _MATCH_CONFIG = load("match_rules.yml")
+
+
+def _get_dbutils():
+    # Lazy import: pyspark.dbutils only exists on real Databricks Runtime,
+    # not the open-source pyspark package this module also needs to import
+    # cleanly under (local tests, CI).
+    from pyspark.dbutils import DBUtils
+
+    return DBUtils(spark)
 
 
 class InformaticaMDMClient(abc.ABC):
@@ -37,7 +61,7 @@ class InformaticaMDMSaaSClient(InformaticaMDMClient):
         self.secret_scope = secret_scope
 
     def _headers(self) -> dict:
-        return {"INFA-SESSION-ID": dbutils.secrets.get(self.secret_scope, "session_token")}
+        return {"INFA-SESSION-ID": _get_dbutils().secrets.get(self.secret_scope, "session_token")}
 
     def match_merge(self, df: DataFrame) -> DataFrame:
         import requests
@@ -182,7 +206,7 @@ class LocalMatchMergeFallback(InformaticaMDMClient):
 
 _client = (
     InformaticaMDMSaaSClient(
-        base_url=dbutils.secrets.get("informatica", "mdm_base_url"),
+        base_url=_get_dbutils().secrets.get("informatica", "mdm_base_url"),
         business_entity=_MATCH_CONFIG["informatica_mdm"]["business_entity"],
         rule_set=_MATCH_CONFIG["informatica_mdm"]["match_rule_set"],
     )

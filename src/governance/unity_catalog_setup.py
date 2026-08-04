@@ -1,3 +1,4 @@
+# Databricks notebook source
 """One-time / idempotent Unity Catalog setup: catalog, schemas, the business
 glossary registry table, and column-level tags on each entity's Gold table.
 Tags do double duty as PII/sensitivity classification and as the glossary
@@ -12,6 +13,21 @@ glossary_terms.yml, not duplicated in this file.
 Run this once per environment (e.g. as a manual job / notebook run), not as
 part of the scheduled pipeline.
 """
+
+from pyspark.sql import SparkSession
+
+# Explicit acquisition rather than relying on the injected notebook global:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see that global.
+spark = SparkSession.builder.getOrCreate()
+import os
+import sys
+
+# Job notebook_task runs don't get the automatic sys.path setup that DLT
+# pipeline library files get — this file lives at .../files/src/governance/
+# when deployed, so its parent's parent is the bundle root containing src/.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
+
 from pyspark.sql import functions as F
 from src.config_loader import load
 from src.governance.steward_review import setup_tables as setup_steward_tables

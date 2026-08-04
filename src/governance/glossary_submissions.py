@@ -9,6 +9,13 @@ Plain importable library (setup_tables, apply_approved_submissions) with no
 top-level execution — see glossary_submissions_apply.py for the job-task
 entry point, same split as steward_review.py / steward_review_refresh.py.
 """
+
+from pyspark.sql import SparkSession
+
+# Explicit acquisition rather than relying on the injected notebook global:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see that global.
+spark = SparkSession.builder.getOrCreate()
 CATALOG = "mdm_dq_demo"
 
 

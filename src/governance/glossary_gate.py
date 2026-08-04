@@ -9,6 +9,21 @@ consumers. This is what turns "glossary and lineage exist alongside the
 pipeline" (the stated gap) into "glossary and lineage are enforced as a gate
 within it."
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
+
+from pyspark.sql import SparkSession
+
+# Explicit acquisition rather than relying on the injected notebook global:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see that global.
+spark = SparkSession.builder.getOrCreate()
 from src.config_loader import load
 
 CATALOG = "mdm_dq_demo"

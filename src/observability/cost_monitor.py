@@ -13,6 +13,21 @@ Two thresholds, not one: daily_budget_usd is a soft warning (printed, not
 fatal); hard_limit_usd actually halts the job — a runaway-cost circuit
 breaker, not just a dashboard number nobody reads until the invoice arrives.
 """
+
+import os
+import sys
+
+# Ensures `from src.xxx import ...` resolves regardless of execution context
+# (job notebook_task run vs module imported by another file) — job/DLT
+# execution doesn't always add the bundle root to sys.path automatically.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..", "..")))
+
+from pyspark.sql import SparkSession
+
+# Explicit acquisition rather than relying on the injected notebook global:
+# functions defined in an imported module (not the top-level executing
+# notebook/pipeline-library file) don't automatically see that global.
+spark = SparkSession.builder.getOrCreate()
 from datetime import date, timedelta
 from pyspark.sql import functions as F
 from src.config_loader import load
