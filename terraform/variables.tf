@@ -30,6 +30,30 @@ variable "informatica_mdm_base_url" {
   default     = "https://REPLACE_ME-mdm.informaticacloud.com"
 }
 
+variable "data_engineer_emails" {
+  description = "Workspace users (must already exist) added to mdm_dq_data_engineers: read/write on bronze/silver/gold, read on config/governance, the only group with landing/staging Volume access. Empty by default."
+  type        = list(string)
+  default     = []
+}
+
+variable "data_steward_emails" {
+  description = "Workspace users added to mdm_dq_data_stewards: read on silver/gold, read/write on governance (steward_decisions). Empty by default."
+  type        = list(string)
+  default     = []
+}
+
+variable "data_analyst_emails" {
+  description = "Workspace users added to mdm_dq_data_analysts: read-only on gold. Empty by default."
+  type        = list(string)
+  default     = []
+}
+
+variable "pii_unmasked_emails" {
+  description = "Workspace users added to mdm_dq_pii_unmasked: see real email/tax_id values on Gold instead of the masked default. Should be a small, audited subset of data_steward_emails. Empty by default."
+  type        = list(string)
+  default     = []
+}
+
 variable "informatica_session_token" {
   description = <<-EOT
     Informatica IDMC session token / API key. Never put a real value in a

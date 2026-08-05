@@ -54,6 +54,19 @@ CREATE TABLE IF NOT EXISTS {CATALOG}.governance.business_glossary (
 ) USING DELTA
 """)
 
+# Row-level function, not a static grant: any column tagged 'pii' below gets
+# this mask attached, so seeing a real value depends on group membership
+# (mdm_dq_pii_unmasked — see terraform/access_control.tf) rather than on
+# which table/schema the column happens to live in. Members of that group
+# still go through the same normal SELECT grant on gold; the mask is the
+# only thing that changes for them.
+spark.sql(f"""
+CREATE OR REPLACE FUNCTION {CATALOG}.governance.mask_pii_string(value STRING)
+RETURNS STRING
+COMMENT 'Masks PII string columns unless the caller is a member of mdm_dq_pii_unmasked.'
+RETURN CASE WHEN is_member('mdm_dq_pii_unmasked') THEN value ELSE '***MASKED***' END
+""")
+
 # entity -> (glossary config file, gold table name, {column: [extra classification tags]})
 # Classification tags (pii, sensitive, ...) are supplementary to the
 # glossary tag every mapped column always gets; not every entity needs any.
@@ -90,6 +103,12 @@ for _entity, (_config_file, _gold_table, _classification_tags) in _ENTITIES.item
             spark.sql(f"""
                 ALTER TABLE {CATALOG}.gold.{_gold_table}
                 ALTER COLUMN {_column} SET TAGS ({_clause})
+            """)
+
+        if "pii" in _classification_tags.get(_column, []):
+            spark.sql(f"""
+                ALTER TABLE {CATALOG}.gold.{_gold_table}
+                ALTER COLUMN {_column} SET MASK {CATALOG}.governance.mask_pii_string
             """)
 
 # MERGE, not overwrite: self-service glossary submissions (see
