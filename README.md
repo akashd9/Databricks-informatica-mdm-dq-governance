@@ -417,22 +417,55 @@ different files; an ambiguous-column bug from two DataFrames sharing a
 shared with every other demo catalog in the workspace. Every one is fixed
 and committed — see the git history for the specific commit per bug.
 
-One real, known gap this run also surfaced and left deliberately unfixed:
-`pipeline.yml`'s `target: silver` routes every declared table into one
-schema regardless of its bronze_/silver_/gold_ name prefix, so the intended
-bronze/silver/gold **schema** separation isn't real yet — everything lives
-under `mdm_dq_demo.silver`, confirmed by `SHOW TABLES IN mdm_dq_demo.gold`
-returning nothing. Consumer scripts were patched to query the actual
-location; the proper fix (per-table schema qualification in every
-`@dlt.table(name=...)`) is documented in `src/governance/glossary_gate.py`
-but not applied, to avoid risking a pipeline that took 8 real fixes to get
-working for the first time.
+**Update, a later session:** the bronze/silver/gold schema-separation gap
+above is fixed — every `@dlt.table(name=...)` is now qualified
+(`bronze.bronze_erp_customer`, `gold.gold_customer_golden`, etc.) and every
+consumer script's `mdm_dq_demo.silver.<gold_table>` workaround was reverted
+to query the real schema. That same session also closed out the other gaps
+a "is this actually prod-grade?" self-review had flagged: least-privilege
+access control (`terraform/access_control.tf` — per-role grants, PII column
+masking via `mask_pii_string`), a documented backup/retention policy
+(`docs/BACKUP_DR.md` — 30-day Gold retention + weekly VACUUM), configurable
+multi-recipient/webhook alerting instead of one hardcoded inbox
+(`resources/jobs.yml`, `terraform/alerting.tf`), and a 6x-larger, deliberately
+messier stress-test dataset (`pilot/generate_stress_dataset.py` — unprefixed
+colliding IDs across sources, burst duplicates, wider corruption) uploaded
+to the live landing Volumes.
+
+**What actually happened deploying the schema fix, in the interest of not
+overselling it:** the live pipeline hit the *same* Unity Catalog table
+quota bug #8 above describes, twice more, worse each time. First, the old
+un-qualified tables (24 of them, all parked under `silver`) were still
+counted against quota while DLT tried to create the new, correctly-split
+set — dropping the 8 that were now-duplicated bronze_/gold_-prefixed
+tables fixed that layer of it. Second, fixing a genuine stale-streaming-
+checkpoint bug (`DIFFERENT_DELTA_TABLE_READ_BY_STREAMING_SOURCE`, caused by
+the bronze tables getting recreated at their new qualified names) required
+a `--full-refresh` update — and a full refresh needs the *entire* DAG to
+complete once before any table's data is considered durably committed. The
+metastore quota (a number this project doesn't control, shared with every
+other demo catalog in the workspace) has sat at 503/500 — three tables
+over — for the better part of an hour across a dozen retries, consistently
+failing on the last two tables in the DAG (`gold.gold_customer_golden`,
+`gold.gold_account_golden`). Net effect: as of this writing, bronze and
+silver tables **exist with the correct schema but are empty** (0 rows),
+gold tables don't exist yet, and the stress-test dataset is uploaded and
+queued but unprocessed — all waiting on one clean end-to-end run, which
+needs either the shared quota to free up on its own or a workspace admin
+to raise it. This is a real, currently-open item, not a resolved one; retry
+`databricks pipelines start-update e673c17a-07fc-45b0-bccc-018a50a18777`
+once quota allows and everything queued should flow through in one run.
 
 Still not done: anything through live Informatica IDMC/MDM (still
 `enabled: false`, pending real tenant credentials — see the credential
-back-and-forth earlier in this project's history) and a real S3 bucket for
-Terraform's remote state backend. Both are blocked on something outside
-this codebase, not on more code.
+back-and-forth earlier in this project's history), a real S3 bucket for
+Terraform's remote state backend, and mdm_dq_test/mdm_dq_prod catalogs
+(the Terraform code is ready — `terraform/variables.tf`'s
+`catalog_storage_root` — but this account's "Default Storage" setting
+rejects catalog creation via the API entirely; it needs one-time UI
+creation in Catalog Explorer, then `terraform import`, the same way
+`mdm_dq_demo` itself was provisioned). All three are blocked on something
+outside this codebase, not on more code.
 
 What this run demonstrates, concretely rather than aspirationally:
 

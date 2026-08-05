@@ -174,6 +174,59 @@ truth for the project. One exception was kept local on purpose: Terraform's
 own record of what it created, which can end up holding real passwords
 once real ones are used, so it's deliberately not uploaded anywhere.
 
+## 11. Closed the remaining "is this actually production-grade?" gaps
+
+After point 9's real run, we asked the honest question: is this actually
+ready for production, or does it just work once? That review found seven
+real gaps, and — other than the two already-known Informatica/Terraform
+blockers — all of them got fixed in a follow-up session:
+
+- **Fixed the bronze/silver/gold split for real.** Point 9's run technically
+  worked, but every table secretly lived in one "silver" bucket regardless
+  of whether it was raw, cleaned, or final data — a shortcut taken to avoid
+  destabilizing a pipeline that had just started working. This session
+  properly separated them into real bronze/silver/gold folders.
+- **Added who-can-see-what rules.** Set up four roles (data engineers, data
+  stewards, data analysts, and a small "sees real PII" group) with exactly
+  the access each needs — engineers can read/write everything, analysts can
+  only read the final trusted data, and email/tax ID columns are
+  automatically hidden (shown as `***MASKED***`) from anyone not
+  specifically allowed to see them.
+- **Added a real backup/recovery plan.** The final trusted tables now keep
+  30 days of history automatically (so a bad run can be undone by asking
+  for "what this table looked like yesterday"), with a weekly automated
+  cleanup job and a written step-by-step recovery guide.
+- **Fixed the "alert one person's email" problem.** Failure alerts now go
+  to a configurable list of people instead of one hardcoded inbox, with
+  data-quality problems able to alert a different team than
+  infrastructure problems, and support for a Slack-style notification in
+  addition to email.
+- **Tried to set up separate test/production copies.** Blocked — creating
+  a brand-new catalog in this Databricks account requires clicking through
+  its website once; it can't be done by script when this particular
+  account setting is on. The setup code is written and ready; it just
+  needs someone with website access to click "Create Catalog" once per
+  environment first.
+- **Generated a much bigger, messier practice dataset** — about 6 times
+  more records than the original test batch, with harder problems on
+  purpose (records in different date formats, foreign accented names,
+  the same ID number accidentally reused by two different source systems)
+  — and uploaded it to the real system, queued up to run.
+- **This document and the README got updated** with all of the above.
+
+**Being honest about where things actually stand right now:** fixing the
+bronze/silver/gold split (the first bullet) required resetting some
+tables so they could be rebuilt correctly, and that rebuild needs to
+finish in one clean pass to count as done. It hasn't finished yet — not
+because of a mistake, but because the *shared* Databricks account (shared
+with other, unrelated demo projects) is currently right at its maximum
+allowed number of tables, and every attempt to finish the rebuild gets
+rejected for exactly that reason. This was already flagged in point 9 as
+something outside this project's control, and it's the same limit still
+blocking things now. Everything is queued and ready — the moment that
+shared limit has a little room, one more run finishes the job
+automatically.
+
 ## Bottom line on Informatica
 
 Two integration points exist and are fully built: **quality checking** and
