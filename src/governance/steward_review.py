@@ -102,9 +102,7 @@ def refresh_queue():
                     concat('match_confidence=', round(match_confidence, 3)) AS reason,
                     merged_at AS detected_at,
                     current_timestamp() AS queued_at
-                -- Gold tables actually live under `silver`, not `gold` — see
-                -- the explanation in src/governance/glossary_gate.py.
-                FROM {CATALOG}.silver.{gold_table}
+                FROM {CATALOG}.gold.{gold_table}
                 WHERE review_status = 'needs_review'
             """)
         )

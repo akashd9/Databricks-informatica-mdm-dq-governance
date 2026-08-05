@@ -19,9 +19,7 @@ _ENTITIES = {
 w = WorkspaceClient()
 
 for _entity, (_gold_table, _slicing_exprs) in _ENTITIES.items():
-    # Gold tables actually live under `silver` — see the explanation in
-    # src/governance/glossary_gate.py.
-    table = f"{CATALOG}.silver.{_gold_table}"
+    table = f"{CATALOG}.gold.{_gold_table}"
     try:
         try:
             w.quality_monitors.get(table_name=table)

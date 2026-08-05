@@ -9,13 +9,6 @@
 -- add each as a dataset, then visualize).
 --
 -- Catalog is mdm_dq_demo throughout — update if you renamed it.
---
--- Gold tables below are queried under the `silver` schema, not `gold` —
--- pipeline.yml's `target: silver` currently routes every declared DLT table
--- into one schema regardless of its bronze_/silver_/gold_ name prefix.
--- Confirmed with a real run (`SHOW TABLES IN mdm_dq_demo.gold` returns
--- nothing). See src/governance/glossary_gate.py for the full explanation
--- and the fix this needs.
 
 -- ============================================================
 -- 1. Freshness SLA compliance (last 30 days), per entity/source
@@ -63,7 +56,7 @@ SELECT 'customer' AS entity, DATE(merged_at) AS d,
        SUM(CASE WHEN review_status = 'auto_merged' THEN 1 ELSE 0 END) AS auto_merged,
        SUM(CASE WHEN review_status = 'needs_review' THEN 1 ELSE 0 END) AS needs_review,
        SUM(CASE WHEN review_status = 'single_source' THEN 1 ELSE 0 END) AS single_source
-FROM mdm_dq_demo.silver.gold_customer_golden
+FROM mdm_dq_demo.gold.gold_customer_golden
 WHERE merged_at >= current_date() - INTERVAL 30 DAY
 GROUP BY DATE(merged_at)
 UNION ALL
@@ -74,7 +67,7 @@ SELECT 'account' AS entity, DATE(merged_at) AS d,
        SUM(CASE WHEN review_status = 'auto_merged' THEN 1 ELSE 0 END) AS auto_merged,
        SUM(CASE WHEN review_status = 'needs_review' THEN 1 ELSE 0 END) AS needs_review,
        SUM(CASE WHEN review_status = 'single_source' THEN 1 ELSE 0 END) AS single_source
-FROM mdm_dq_demo.silver.gold_account_golden
+FROM mdm_dq_demo.gold.gold_account_golden
 WHERE merged_at >= current_date() - INTERVAL 30 DAY
 GROUP BY DATE(merged_at)
 ORDER BY d DESC, entity;

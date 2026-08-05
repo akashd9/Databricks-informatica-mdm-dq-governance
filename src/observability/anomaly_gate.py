@@ -23,11 +23,9 @@ _ENTITIES = {
 }
 
 for _entity, (_gold_table, _quarantine_table, _scored_table) in _ENTITIES.items():
-    # Gold tables actually live under `silver` — see the explanation in
-    # src/governance/glossary_gate.py.
     history = spark.sql(f"""
         SELECT DATE(merged_at) AS d, COUNT(*) AS row_count
-        FROM {CATALOG}.silver.{_gold_table}
+        FROM {CATALOG}.gold.{_gold_table}
         WHERE merged_at >= current_date() - INTERVAL 8 DAY
         GROUP BY DATE(merged_at)
         ORDER BY d
