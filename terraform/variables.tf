@@ -54,6 +54,13 @@ variable "pii_unmasked_emails" {
   default     = []
 }
 
+variable "alert_webhook_url" {
+  description = "Generic webhook URL (Slack incoming webhooks work) for job failure alerts beyond email. Empty by default — no notification destination is created, and resources/jobs.yml's webhook_notifications stays an empty list. Never put a real value in a committed .tfvars file; pass via TF_VAR_alert_webhook_url or -var."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "informatica_session_token" {
   description = <<-EOT
     Informatica IDMC session token / API key. Never put a real value in a

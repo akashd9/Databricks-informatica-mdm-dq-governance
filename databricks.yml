@@ -4,6 +4,35 @@ bundle:
 variables:
   catalog:
     default: mdm_dq_demo
+  # Job failure emails. Defaults to whoever deployed the bundle so a fresh
+  # dev deployment always has *someone* notified; override per environment
+  # (see prod's variables below) with a real on-call distribution list —
+  # one person's inbox is not an incident process.
+  alert_emails:
+    type: complex
+    default:
+      - ${workspace.current_user.userName}
+  # Separate list for the DQ/governance gates specifically (anomaly_gate,
+  # glossary_lineage_gate) — a data-quality regression and a generic
+  # pipeline/infra failure often belong to different on-call rotations.
+  # Defaults to the same list as alert_emails; override independently once
+  # a real governance distribution list exists.
+  governance_alert_emails:
+    type: complex
+    default:
+      - ${workspace.current_user.userName}
+  # Databricks notification destinations (Slack/PagerDuty/MS Teams/generic
+  # webhook — see terraform/alerting.tf) for job failure alerts beyond
+  # email. Empty list by default: an empty webhook_notifications list is
+  # valid and just means "no webhook configured", unlike a single entry
+  # with a blank id, which would fail at deploy. Terraform and the bundle
+  # are separate tools/state here, so this isn't wired automatically —
+  # after `terraform apply` creates a destination, override this variable
+  # with its id, e.g.
+  #   databricks bundle deploy -t prod --var='alert_webhook_destinations=[{"id":"<real-id>"}]'
+  alert_webhook_destinations:
+    type: complex
+    default: []
 
 include:
   - resources/*.yml

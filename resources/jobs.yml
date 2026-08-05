@@ -20,6 +20,11 @@ resources:
             - task_key: run_medallion_pipeline
           notebook_task:
             notebook_path: ../src/observability/anomaly_gate.py
+          # Task-level, in addition to the job-level on_failure below — a DQ/
+          # volume regression is a governance-team problem, not necessarily
+          # the same on-call rotation as a generic infra/pipeline failure.
+          email_notifications:
+            on_failure: ${var.governance_alert_emails}
 
         - task_key: refresh_steward_queue
           depends_on:
@@ -40,6 +45,8 @@ resources:
             - task_key: apply_glossary_submissions
           notebook_task:
             notebook_path: ../src/governance/glossary_gate.py
+          email_notifications:
+            on_failure: ${var.governance_alert_emails}
 
         - task_key: cost_monitor
           depends_on:
@@ -60,8 +67,14 @@ resources:
         pause_status: PAUSED
 
       email_notifications:
-        on_failure:
-          - ${workspace.current_user.userName}
+        on_failure: ${var.alert_emails}
+      webhook_notifications:
+        on_failure: ${var.alert_webhook_destinations}
+      # Retried/skipped/canceled runs would otherwise duplicate or pad out
+      # the signal a real on-call rotation acts on.
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
 
     mdm_dq_medallion_maintenance_job:
       name: mdm-dq-medallion-maintenance-${bundle.target}
@@ -80,5 +93,9 @@ resources:
         pause_status: PAUSED
 
       email_notifications:
-        on_failure:
-          - ${workspace.current_user.userName}
+        on_failure: ${var.alert_emails}
+      webhook_notifications:
+        on_failure: ${var.alert_webhook_destinations}
+      notification_settings:
+        no_alert_for_skipped_runs: true
+        no_alert_for_canceled_runs: true
