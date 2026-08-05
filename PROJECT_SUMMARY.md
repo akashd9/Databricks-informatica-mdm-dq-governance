@@ -219,13 +219,25 @@ bronze/silver/gold split (the first bullet) required resetting some
 tables so they could be rebuilt correctly, and that rebuild needs to
 finish in one clean pass to count as done. It hasn't finished yet — not
 because of a mistake, but because the *shared* Databricks account (shared
-with other, unrelated demo projects) is currently right at its maximum
-allowed number of tables, and every attempt to finish the rebuild gets
-rejected for exactly that reason. This was already flagged in point 9 as
-something outside this project's control, and it's the same limit still
-blocking things now. Everything is queued and ready — the moment that
-shared limit has a little room, one more run finishes the job
-automatically.
+with other, unrelated demo projects) was right at its maximum allowed
+number of tables, and every attempt to finish the rebuild got rejected for
+exactly that reason.
+
+At your direction, we then went and actually cleaned that up: found two
+completely empty leftover catalogs from an old project and deleted them,
+then found a third, larger abandoned project (~99 real tables) and deleted
+that too, double-checking both times that what got deleted was genuinely
+unused. That's over 100 real tables removed. **And the error message
+didn't change at all** — same exact "you're 3 over the limit" number,
+before and after, across two hours and eight more attempts. That's a
+strong sign Databricks' own count of "how many tables you have" is a
+cached number on their end that isn't updating in real time, not
+something this project can fix by deleting more. The two real options
+from here are waiting for that cache to refresh on its own, or asking
+Databricks support to clear it manually. The moment it clears, everything
+that's queued (including a new, 6x-bigger practice dataset already
+uploaded) runs through in one pass automatically — no further changes
+needed on this end.
 
 ## Bottom line on Informatica
 

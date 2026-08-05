@@ -442,19 +442,39 @@ tables fixed that layer of it. Second, fixing a genuine stale-streaming-
 checkpoint bug (`DIFFERENT_DELTA_TABLE_READ_BY_STREAMING_SOURCE`, caused by
 the bronze tables getting recreated at their new qualified names) required
 a `--full-refresh` update — and a full refresh needs the *entire* DAG to
-complete once before any table's data is considered durably committed. The
-metastore quota (a number this project doesn't control, shared with every
-other demo catalog in the workspace) has sat at 503/500 — three tables
-over — for the better part of an hour across a dozen retries, consistently
-failing on the last two tables in the DAG (`gold.gold_customer_golden`,
-`gold.gold_account_golden`). Net effect: as of this writing, bronze and
-silver tables **exist with the correct schema but are empty** (0 rows),
-gold tables don't exist yet, and the stress-test dataset is uploaded and
-queued but unprocessed — all waiting on one clean end-to-end run, which
-needs either the shared quota to free up on its own or a workspace admin
-to raise it. This is a real, currently-open item, not a resolved one; retry
+complete once before any table's data is considered durably committed. Net
+effect: bronze and silver tables **exist with the correct schema but are
+empty** (0 rows) pending one clean end-to-end run.
+
+**Tried freeing the shared metastore quota directly, and found something
+worth documenting.** With the user's explicit go-ahead, this account's
+other, unrelated demo catalogs were audited (`system.information_schema.tables`
+grouped by catalog) and cleaned up in two rounds: two fully empty catalogs
+(`lakehouse_demo_test`, `lakehouse_demo_prod` — verified zero real tables
+first) were dropped, then a third, `ecommerce_lakehouse_dev`, was dropped
+entirely (~99 real tables, confirmed abandoned and unrelated to this
+project). Both drops were verified afterward directly against
+`system.information_schema` — the catalogs are genuinely gone and the
+real table count across the metastore dropped substantially. **The
+pipeline's quota error never moved.** Across 8+ retries spanning roughly
+two hours, both before and after ~107 real tables were confirmed deleted,
+`QUOTA_EXCEEDED.UC_RESOURCE_QUOTA_EXCEEDED` reported the exact same
+`estimated count: 503, limit: 500` every single time — including retries
+run minutes apart with real, verified deletions in between. That's strong
+evidence the `estimated count` this error reports is a **stale, cached
+figure on Databricks' side**, not a live count, and it isn't refreshing on
+any timescale observed in this session. More deleting won't fix a number
+that demonstrably isn't responding to deletions.
+
+This is a real, currently-open item, not a resolved one. The two paths
+forward from here are waiting for that cache to refresh on its own
+schedule (unknown interval) and retrying periodically, or asking
+Databricks support to manually clear the quota cache for metastore
+`9325dd5f-10c9-42e2-a7c9-f3374033eefb` (or raise the limit outright).
+Once it clears, retry
 `databricks pipelines start-update e673c17a-07fc-45b0-bccc-018a50a18777`
-once quota allows and everything queued should flow through in one run.
+— the stress-test dataset is already uploaded and queued, so the next
+clean run processes everything in one pass.
 
 Still not done: anything through live Informatica IDMC/MDM (still
 `enabled: false`, pending real tenant credentials — see the credential
