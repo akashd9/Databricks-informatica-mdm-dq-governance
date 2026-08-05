@@ -62,3 +62,23 @@ resources:
       email_notifications:
         on_failure:
           - ${workspace.current_user.userName}
+
+    mdm_dq_medallion_maintenance_job:
+      name: mdm-dq-medallion-maintenance-${bundle.target}
+      # Separate, low-frequency job: VACUUM is storage cleanup, not part of
+      # the hourly data flow, and running it that often would just waste
+      # compute. See src/governance/vacuum_maintenance.py for the retention
+      # window this enforces.
+      tasks:
+        - task_key: vacuum_tables
+          notebook_task:
+            notebook_path: ../src/governance/vacuum_maintenance.py
+
+      schedule:
+        quartz_cron_expression: "0 0 3 ? * SUN"
+        timezone_id: UTC
+        pause_status: PAUSED
+
+      email_notifications:
+        on_failure:
+          - ${workspace.current_user.userName}

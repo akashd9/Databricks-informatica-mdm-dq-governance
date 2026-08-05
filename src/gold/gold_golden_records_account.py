@@ -25,7 +25,17 @@ _MIN_SCORE = _DQ_CONFIG["informatica_dq"]["min_dq_score_for_gold"]
 @dlt.table(
     name="gold.gold_account_golden",
     comment="Curated, DQ-scored, de-duplicated golden account record.",
-    table_properties={"quality": "gold", "delta.enableChangeDataFeed": "true"},
+    # 30-day retention backs the point-in-time restore procedure in
+    # docs/BACKUP_DR.md (RESTORE TABLE ... TO TIMESTAMP AS OF); the weekly
+    # VACUUM task (src/governance/vacuum_maintenance.py) retains exactly
+    # this same 720 hours so it never prunes files a restore inside the
+    # window would need.
+    table_properties={
+        "quality": "gold",
+        "delta.enableChangeDataFeed": "true",
+        "delta.deletedFileRetentionDuration": "interval 30 days",
+        "delta.logRetentionDuration": "interval 30 days",
+    },
 )
 @dlt.expect_or_fail("has_golden_id", "golden_id IS NOT NULL")
 @dlt.expect_or_fail("min_dq_score", f"dq_score >= {_MIN_SCORE}")
