@@ -238,10 +238,41 @@ what that run actually did.
   and the open design question (regional vs. global golden records) to
   resolve first.
 
+- **Phase 5 — Production-grade hardening — done except two
+  externally-blocked items.** Triggered by an honest "is this actually
+  prod-grade?" self-review after Phase 3's real run. ✅ Bronze/silver/gold
+  schema separation made real (every `@dlt.table(name=...)` qualified with
+  its actual schema; every consumer-script `mdm_dq_demo.silver.<gold_table>`
+  workaround reverted); ✅ least-privilege access control
+  (`terraform/access_control.tf` — four roles, PII column masking via
+  `mask_pii_string`, applied and verified live); ✅ backup/retention policy
+  (`docs/BACKUP_DR.md` — 30-day Gold retention + weekly VACUUM
+  (`src/governance/vacuum_maintenance.py`) + a tested restore runbook); ✅
+  configurable, per-gate alerting (`resources/jobs.yml`,
+  `terraform/alerting.tf` — multi-recipient email, optional webhook,
+  DQ/governance gates routed separately from infra failures); ✅ 6x larger,
+  deliberately messier stress-test dataset
+  (`pilot/generate_stress_dataset.py` — unprefixed colliding IDs across
+  sources, burst duplicates, wider corruption) generated and uploaded to
+  the live landing Volumes. ⬜ **Not done**: mdm_dq_test/mdm_dq_prod
+  catalogs — Terraform code is ready (`terraform/variables.tf`'s
+  `catalog_storage_root`), but this account's "Default Storage" setting
+  rejects catalog creation via the API outright; needs one-time UI creation
+  in Catalog Explorer, then `terraform import`, the same way `mdm_dq_demo`
+  itself was provisioned. ⬜ **Not done**: getting the live pipeline all the
+  way through a clean end-to-end run after the schema-separation full
+  refresh — blocked by the shared metastore's `QUOTA_EXCEEDED.
+  UC_RESOURCE_QUOTA_EXCEEDED` (see Business Result / Impact below); over
+  100 real tables were confirmed deleted from unrelated catalogs in this
+  same account and the quota error never moved, pointing at a stale cache
+  on Databricks' side rather than anything left to fix in this codebase.
+
 **What's still genuinely open, in one place:** real Informatica IDMC/MDM
 credentials (Phase 1), an AWS-provisioned S3 bucket for remote Terraform
-state (Phase 2), and a stakeholder decision on the multi-region data model
-(Phase 4) — all three are blocked on something outside this codebase, not on
+state (Phase 2), a stakeholder decision on the multi-region data model
+(Phase 4), one-time UI catalog creation for test/prod (Phase 5), and a
+Databricks-side stale quota cache blocking the final clean pipeline run
+(Phase 5) — all five are blocked on something outside this codebase, not on
 more code.
 
 ## Implementation Detail

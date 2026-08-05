@@ -221,23 +221,36 @@ finish in one clean pass to count as done. It hasn't finished yet — not
 because of a mistake, but because the *shared* Databricks account (shared
 with other, unrelated demo projects) was right at its maximum allowed
 number of tables, and every attempt to finish the rebuild got rejected for
-exactly that reason.
+exactly that reason. See point 12 for what we then did about it.
 
-At your direction, we then went and actually cleaned that up: found two
-completely empty leftover catalogs from an old project and deleted them,
-then found a third, larger abandoned project (~99 real tables) and deleted
-that too, double-checking both times that what got deleted was genuinely
-unused. That's over 100 real tables removed. **And the error message
-didn't change at all** — same exact "you're 3 over the limit" number,
-before and after, across two hours and eight more attempts. That's a
+## 12. Tried to free up the shared table limit directly
+
+At your direction, rather than just waiting, we went and actually looked
+at what else was using up the shared account's table allowance:
+
+- **Audited every other project in the account** — not guessing, but
+  querying Databricks' own system tables to get a real count of how many
+  tables each of your other demo catalogs actually had.
+- **Found and deleted two completely empty leftover catalogs** from an
+  old project (double-checked they held zero real tables before touching
+  them).
+- **Found a third, larger abandoned project (~99 real tables) and deleted
+  it too**, after confirming it was unrelated to this work and genuinely
+  not in use.
+- That's **over 100 real tables removed and independently verified gone**
+  — checked directly, not just assumed.
+
+**And the pipeline's error message didn't change at all.** Same exact
+"you're 3 tables over the limit" number, before the deletions and after,
+across roughly two hours and eight more attempts in between. That's a
 strong sign Databricks' own count of "how many tables you have" is a
-cached number on their end that isn't updating in real time, not
-something this project can fix by deleting more. The two real options
-from here are waiting for that cache to refresh on its own, or asking
+cached number on their end that isn't updating in real time — not
+something fixable by deleting more from this side. The two real options
+left are waiting for that cache to refresh on its own, or asking
 Databricks support to clear it manually. The moment it clears, everything
-that's queued (including a new, 6x-bigger practice dataset already
-uploaded) runs through in one pass automatically — no further changes
-needed on this end.
+already queued (including the 6x-bigger practice dataset from point 11)
+should run through in one pass automatically — no further changes needed
+on this end.
 
 ## Bottom line on Informatica
 
