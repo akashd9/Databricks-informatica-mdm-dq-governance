@@ -12,7 +12,7 @@
 resource "databricks_catalog" "this" {
   name         = var.catalog_name
   comment      = "MDM/DQ medallion demo catalog: Bronze/Silver/Gold + governance + landing/staging Volumes."
-  storage_root = "s3://dbstorage-prod-h7lk8/uc/66a4289c-028d-4a35-a93d-002bc1716981/9325dd5f-10c9-42e2-a7c9-f3374033eefb"
+  storage_root = var.catalog_storage_root != "" ? var.catalog_storage_root : null
 
   lifecycle {
     prevent_destroy = true

@@ -10,6 +10,25 @@ variable "catalog_name" {
   default     = "mdm_dq_demo"
 }
 
+variable "catalog_storage_root" {
+  description = <<-EOT
+    Explicit storage_root for the catalog. Required, and must match exactly,
+    when Terraform is importing/managing an EXISTING catalog created via the
+    UI under this account's "Default Storage" setting — see the comment
+    above databricks_catalog.this for why (ForceNew risk if it's ever unset).
+    The default here is mdm_dq_demo's real, already-imported value.
+
+    For a brand-new catalog (test/prod, via `terraform workspace new
+    test`/`prod` + `-var catalog_name=mdm_dq_test -var
+    catalog_storage_root=""`), leave this empty so storage_root is omitted
+    from the resource entirely and Unity Catalog assigns default managed
+    storage automatically — passing a value here for a catalog that was
+    never assigned that exact location would be wrong, not just redundant.
+  EOT
+  type        = string
+  default     = "s3://dbstorage-prod-h7lk8/uc/66a4289c-028d-4a35-a93d-002bc1716981/9325dd5f-10c9-42e2-a7c9-f3374033eefb"
+}
+
 variable "informatica_idmc_base_url" {
   description = <<-EOT
     Informatica IDMC Cloud Data Quality API base URL. The default below is a
