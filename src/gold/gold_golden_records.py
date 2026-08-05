@@ -23,15 +23,15 @@ _MIN_SCORE = _DQ_CONFIG["informatica_dq"]["min_dq_score_for_gold"]
 
 
 @dlt.table(
-    name="gold_customer_golden",
+    name="gold.gold_customer_golden",
     comment="Curated, DQ-scored, de-duplicated golden customer record — the consumption-ready source of truth.",
     table_properties={"quality": "gold", "delta.enableChangeDataFeed": "true"},
 )
 @dlt.expect_or_fail("has_golden_id", "golden_id IS NOT NULL")
 @dlt.expect_or_fail("min_dq_score", f"dq_score >= {_MIN_SCORE}")
 def gold_customer_golden():
-    dq_passed = dlt.read("silver_customer_dq_passed")
-    match_groups = dlt.read("silver_customer_match_groups")
+    dq_passed = dlt.read("silver.silver_customer_dq_passed")
+    match_groups = dlt.read("silver.silver_customer_match_groups")
     golden = build_golden_records(dq_passed, match_groups, _MATCH_CONFIG)
     return golden.select(
         "golden_id",

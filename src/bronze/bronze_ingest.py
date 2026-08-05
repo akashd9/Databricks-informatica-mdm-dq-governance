@@ -31,7 +31,7 @@ _SOURCES = load("sources.yml")["sources"] + load("account_sources.yml")["sources
 
 def _make_bronze_table(source: dict):
     @dlt.table(
-        name=f"bronze_{source['name']}_{source['entity']}",
+        name=f"bronze.bronze_{source['name']}_{source['entity']}",
         comment=f"Raw {source['entity']} records ingested from {source['name']} via Autoloader.",
         table_properties={"quality": "bronze"},
     )

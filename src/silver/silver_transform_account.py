@@ -18,8 +18,8 @@ from pyspark.sql import functions as F
 from src.config_loader import load
 
 _BRONZE_TABLES = {
-    "erp": "bronze_erp_account",
-    "crm": "bronze_crm_account",
+    "erp": "bronze.bronze_erp_account",
+    "crm": "bronze.bronze_crm_account",
 }
 
 _COLUMN_CONFIG = load("account_column_maps.yml")
@@ -31,7 +31,7 @@ def _standardize(source_name: str, bronze_table: str):
     colmap = _COLUMN_MAPS[source_name]
 
     @dlt.table(
-        name=f"silver_{source_name}_account_std",
+        name=f"silver.silver_{source_name}_account_std",
         comment=f"Standardized {source_name} account records mapped to the canonical entity schema.",
         table_properties={"quality": "silver"},
     )
@@ -55,12 +55,12 @@ for _name, _table in _BRONZE_TABLES.items():
 
 
 @dlt.table(
-    name="silver_account_standardized",
+    name="silver.silver_account_standardized",
     comment="Union of all source-standardized account records, prior to the DQ gate.",
     table_properties={"quality": "silver"},
 )
 def silver_account_standardized():
-    frames = [dlt.read_stream(f"silver_{s}_account_std") for s in _BRONZE_TABLES]
+    frames = [dlt.read_stream(f"silver.silver_{s}_account_std") for s in _BRONZE_TABLES]
     unioned = frames[0]
     for f in frames[1:]:
         unioned = unioned.unionByName(f)

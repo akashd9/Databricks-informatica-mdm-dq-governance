@@ -17,10 +17,10 @@ from pyspark.sql import functions as F
 from src.config_loader import load
 
 _BRONZE_TABLES = {
-    "erp": "bronze_erp_customer",
-    "crm": "bronze_crm_customer",
-    "flatfile": "bronze_flatfile_customer",
-    "partner_api": "bronze_partner_api_customer",
+    "erp": "bronze.bronze_erp_customer",
+    "crm": "bronze.bronze_crm_customer",
+    "flatfile": "bronze.bronze_flatfile_customer",
+    "partner_api": "bronze.bronze_partner_api_customer",
 }
 
 # Raw-to-canonical column mapping lives in config/column_maps.yml — shared
@@ -35,7 +35,7 @@ def _standardize(source_name: str, bronze_table: str):
     colmap = _COLUMN_MAPS[source_name]
 
     @dlt.table(
-        name=f"silver_{source_name}_customer_std",
+        name=f"silver.silver_{source_name}_customer_std",
         comment=f"Standardized {source_name} customer records mapped to the canonical entity schema.",
         table_properties={"quality": "silver"},
     )
@@ -61,12 +61,12 @@ for _name, _table in _BRONZE_TABLES.items():
 
 
 @dlt.table(
-    name="silver_customer_standardized",
+    name="silver.silver_customer_standardized",
     comment="Union of all source-standardized customer records, prior to the DQ gate.",
     table_properties={"quality": "silver"},
 )
 def silver_customer_standardized():
-    frames = [dlt.read_stream(f"silver_{s}_customer_std") for s in _BRONZE_TABLES]
+    frames = [dlt.read_stream(f"silver.silver_{s}_customer_std") for s in _BRONZE_TABLES]
     unioned = frames[0]
     for f in frames[1:]:
         unioned = unioned.unionByName(f)

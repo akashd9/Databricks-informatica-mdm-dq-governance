@@ -35,9 +35,9 @@ _client = (
 
 
 @dlt.table(
-    name="silver_account_match_groups",
+    name="silver.silver_account_match_groups",
     comment="Cluster assignments from Informatica MDM (or local fallback) mapping DQ-passed account records to a golden_id.",
     table_properties={"quality": "silver"},
 )
 def silver_account_match_groups():
-    return _client.match_merge(dlt.read("silver_account_dq_passed"))
+    return _client.match_merge(dlt.read("silver.silver_account_dq_passed"))

@@ -45,7 +45,7 @@ _client = (
 
 
 @dlt.table(
-    name="silver_customer_dq_scored",
+    name="silver.silver_customer_dq_scored",
     comment="Every standardized customer record, scored by the Informatica DQ gate (or local fallback).",
     table_properties={"quality": "silver"},
 )
@@ -54,7 +54,7 @@ _client = (
     "has_name": "full_name IS NOT NULL",
 })
 def silver_customer_dq_scored():
-    return _client.score(dlt.read("silver_customer_standardized"), _MAPPING)
+    return _client.score(dlt.read("silver.silver_customer_standardized"), _MAPPING)
 
 
 def _approved_ids():
@@ -62,12 +62,12 @@ def _approved_ids():
 
 
 @dlt.table(
-    name="silver_customer_dq_quarantine",
+    name="silver.silver_customer_dq_quarantine",
     comment="Records below the minimum DQ score and not yet steward-approved — held for review, never reach Gold.",
     table_properties={"quality": "silver"},
 )
 def silver_customer_dq_quarantine():
-    below_threshold = dlt.read("silver_customer_dq_scored").filter(F.col("dq_score") < _MIN_SCORE)
+    below_threshold = dlt.read("silver.silver_customer_dq_scored").filter(F.col("dq_score") < _MIN_SCORE)
     approved = _approved_ids()
     if approved:
         return below_threshold.filter(~F.col("customer_id").isin(approved))
@@ -75,12 +75,12 @@ def silver_customer_dq_quarantine():
 
 
 @dlt.table(
-    name="silver_customer_dq_passed",
+    name="silver.silver_customer_dq_passed",
     comment="Records that cleared the DQ gate, plus any steward-approved override, eligible for MDM match/merge.",
     table_properties={"quality": "silver"},
 )
 def silver_customer_dq_passed():
-    scored = dlt.read("silver_customer_dq_scored")
+    scored = dlt.read("silver.silver_customer_dq_scored")
     passed_naturally = scored.filter(F.col("dq_score") >= F.lit(_MIN_SCORE))
 
     approved = _approved_ids()
